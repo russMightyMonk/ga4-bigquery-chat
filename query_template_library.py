@@ -1165,35 +1165,6 @@ ORDER BY
 """
     },
 
-    "analyze_app_information": {
-        "description": "Analyzes mobile app information including versions, install sources, and stores. Good for questions like 'app version usage', 'install source breakdown', 'app store analysis', or 'app version distribution'.",
-        "template": """
--- Analyzes mobile app characteristics including version, install source, and store
--- LLM: Replace {start_date} and {end_date} with user-specified date range
-SELECT
-    COALESCE(app_info.id, 'Unknown_App_ID') AS app_bundle_id,
-    COALESCE(app_info.version, 'Unknown_Version') AS app_version,
-    COALESCE(app_info.install_store, 'Unknown_Store') AS installation_store,
-    COALESCE(app_info.install_source, 'Unknown_Source') AS installation_source,
-    COUNT(DISTINCT user_pseudo_id) AS unique_users,
-    COUNT(DISTINCT CONCAT(
-        user_pseudo_id, 
-        CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-    )) AS total_sessions
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    AND platform = 'APP'
-    AND app_info.id IS NOT NULL
-    -- LLM: Include user-specified filtering conditions
-GROUP BY
-    app_bundle_id, app_version, installation_store, installation_source
-ORDER BY
-    unique_users DESC
-"""
-    },
-
     "analyze_device_languages": {
         "description": "Analyzes device language settings and geographic distribution. Good for questions like 'users by language', 'device language breakdown', 'language preferences', or 'localization analysis'.",
         "template": """
@@ -1201,7 +1172,6 @@ ORDER BY
 -- LLM: Replace {start_date} and {end_date} with user-specified date range
 SELECT
     COALESCE(device.language, 'Unknown_Language') AS device_language,
-    ROUND(device.time_zone_offset_seconds / 3600, 1) AS timezone_offset_hours,
     COUNT(DISTINCT user_pseudo_id) AS unique_users,
     COUNT(DISTINCT CONCAT(
         user_pseudo_id, 
@@ -1247,38 +1217,6 @@ ORDER BY
 """
     },
 
-    "analyze_ad_tracking_settings": {
-        "description": "Analyzes advertising tracking preferences and advertising IDs. Good for questions like 'ad tracking opt-out rates', 'advertising ID usage', 'privacy settings analysis', or 'tracking consent breakdown'.",
-        "template": """
--- Analyzes advertising tracking settings and ID availability
--- LLM: Replace {start_date} and {end_date} with user-specified date range
-SELECT
-    CASE 
-        WHEN device.is_limited_ad_tracking IS TRUE THEN 'Ad_Tracking_Limited'
-        WHEN device.is_limited_ad_tracking IS FALSE THEN 'Ad_Tracking_Allowed'
-        ELSE 'Ad_Tracking_Unknown'
-    END AS ad_tracking_status,
-    CASE 
-        WHEN device.advertising_id IS NOT NULL THEN 'Has_Advertising_ID'
-        WHEN device.vendor_id IS NOT NULL THEN 'Has_Vendor_ID_Only'
-        ELSE 'No_Advertising_Identifiers'
-    END AS identifier_availability,
-    COUNT(DISTINCT user_pseudo_id) AS unique_users,
-    COUNT(DISTINCT CONCAT(
-        user_pseudo_id, 
-        CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-    )) AS total_sessions
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    -- LLM: Include additional filtering as needed
-GROUP BY
-    ad_tracking_status, identifier_availability
-ORDER BY
-    unique_users DESC
-"""
-    },
         "analyze_global_reach": {
         "description": "Analyzes user distribution across continents and subcontinents. Good for questions like 'global user distribution', 'users by continent', 'worldwide reach analysis', or 'international audience breakdown'.",
         "template": """
@@ -1366,7 +1304,7 @@ SELECT
         COUNT(DISTINCT CONCAT(
             user_pseudo_id, 
             CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-        )) * 1.0 / COUNT(DISTINCT user_pseudo_id), 2
+        )) * 1.0 / NULLIF(COUNT(DISTINCT user_pseudo_id), 0), 2
     ) AS avg_sessions_per_user
 FROM
     `{project_id}.{dataset_id}.events_*`
@@ -1427,7 +1365,7 @@ SELECT
     )) AS total_sessions,
     COUNT(*) AS total_events,
     COUNT(DISTINCT event_name) AS unique_event_types,
-    ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT user_pseudo_id), 2) AS avg_events_per_user
+    ROUND(COUNT(*) * 1.0 / NULLIF(COUNT(DISTINCT user_pseudo_id), 0), 2) AS avg_events_per_user
 FROM
     `{project_id}.{dataset_id}.events_*`
 WHERE
@@ -1960,19 +1898,20 @@ SELECT
         COUNT(DISTINCT CONCAT(
             user_pseudo_id, 
             CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-        )) * 1.0 / COUNT(DISTINCT user_pseudo_id), 2
+        )) * 1.0 / NULLIF(COUNT(DISTINCT user_pseudo_id), 0), 2
     ) AS avg_sessions_per_user,
     ROUND(
-        COUNTIF(event_name = 'page_view') * 1.0 / COUNT(DISTINCT CONCAT(
+        COUNTIF(event_name = 'page_view') * 1.0 / NULLIF(COUNT(DISTINCT CONCAT(
             user_pseudo_id, 
             CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-        )), 2
+        )), 0), 2
     ) AS avg_page_views_per_session
 FROM
     `{project_id}.{dataset_id}.events_*`
 WHERE
     _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    AND (collected_traffic_source.manual_source IS NOT NULL 
+    AND
+   (collected_traffic_source.manual_source IS NOT NULL 
          OR collected_traffic_source.manual_medium IS NOT NULL)
     -- LLM: Include user-specified WHERE conditions
 GROUP BY
@@ -2145,66 +2084,6 @@ ORDER BY
 """
     },
 
-    "analyze_campaign_platform_tactics": {
-        "description": "Analyzes campaign performance by platform and marketing tactics. Good for questions like 'performance by source platform', 'marketing tactic effectiveness', 'platform-specific campaign analysis', or 'tactic and format performance'.",
-        "template": """
--- Analyzes campaign performance across platforms and marketing tactics
--- LLM: Replace {start_date} and {end_date} with user-specified date range
-SELECT
-    COALESCE(collected_traffic_source.manual_source_platform, '(source_platform_not_set)') AS source_platform,
-    COALESCE(collected_traffic_source.manual_marketing_tactic, '(marketing_tactic_not_set)') AS marketing_tactic,
-    COALESCE(collected_traffic_source.manual_creative_format, '(creative_format_not_set)') AS creative_format,
-    COALESCE(collected_traffic_source.manual_campaign_name, '(campaign_not_set)') AS utm_campaign_name,
-    COUNT(DISTINCT user_pseudo_id) AS unique_users,
-    COUNT(DISTINCT CONCAT(
-        user_pseudo_id, 
-        CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-    )) AS total_sessions,
-    COUNT(*) AS total_events,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_number') = 1 
-             THEN user_pseudo_id 
-        END
-    ) AS new_users,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
-             THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-        END
-    ) AS engaged_sessions,
-    ROUND(
-        COUNT(DISTINCT CONCAT(
-            user_pseudo_id, 
-            CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-        )) * 1.0 / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS avg_sessions_per_user,
-    ROUND(
-        SAFE_DIVIDE(
-            COUNT(DISTINCT 
-                CASE WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
-                     THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-                END
-            ),
-            COUNT(DISTINCT CONCAT(
-                user_pseudo_id, 
-                CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-            ))
-        ) * 100, 2
-    ) AS engagement_rate_percentage
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    AND (collected_traffic_source.manual_source_platform IS NOT NULL 
-         OR collected_traffic_source.manual_marketing_tactic IS NOT NULL
-         OR collected_traffic_source.manual_creative_format IS NOT NULL)
-    -- LLM: Apply additional filters as specified
-GROUP BY
-    source_platform, marketing_tactic, creative_format, utm_campaign_name
-ORDER BY
-    unique_users DESC
-"""
-    },
-
     "compare_utm_vs_auto_attribution": {
         "description": "Compares manual UTM tracking vs automatic attribution data. Good for questions like 'UTM vs auto attribution comparison', 'manual vs automatic tracking', 'attribution data quality analysis', or 'tracking implementation audit'.",
         "template": """
@@ -2240,70 +2119,6 @@ WHERE
     -- LLM: Include user-specified filtering conditions
 GROUP BY
     attribution_data_status, primary_source, primary_medium
-ORDER BY
-    unique_users DESC
-"""
-    },
-
-    "analyze_specific_utm_campaign": {
-        "description": "Deep dive analysis of a specific UTM campaign with all UTM parameters. Good for questions like 'analyze UTM campaign [campaign_name]', 'detailed UTM tracking for [campaign]', 'complete UTM parameter breakdown for [campaign]', or 'UTM campaign deep dive'.",
-        "template": """
--- Provides comprehensive analysis of a specific UTM campaign with all parameters
--- LLM: Replace {utm_campaign_name}, {start_date} and {end_date} with user-specified values
-SELECT
-    collected_traffic_source.manual_campaign_name AS utm_campaign,
-    COALESCE(collected_traffic_source.manual_campaign_id, '(no_campaign_id)') AS utm_campaign_id,
-    COALESCE(collected_traffic_source.manual_source, '(no_utm_source)') AS utm_source,
-    COALESCE(collected_traffic_source.manual_medium, '(no_utm_medium)') AS utm_medium,
-    COALESCE(collected_traffic_source.manual_term, '(no_utm_term)') AS utm_term,
-    COALESCE(collected_traffic_source.manual_content, '(no_utm_content)') AS utm_content,
-    COALESCE(collected_traffic_source.manual_source_platform, '(no_source_platform)') AS source_platform,
-    COALESCE(collected_traffic_source.manual_creative_format, '(no_creative_format)') AS creative_format,
-    COALESCE(collected_traffic_source.manual_marketing_tactic, '(no_marketing_tactic)') AS marketing_tactic,
-    COUNT(DISTINCT user_pseudo_id) AS unique_users,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_number') = 1 
-             THEN user_pseudo_id 
-        END
-    ) AS new_users,
-    COUNT(DISTINCT CONCAT(
-        user_pseudo_id, 
-        CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-    )) AS total_sessions,
-    COUNTIF(event_name = 'page_view') AS page_views,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
-             THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-        END
-    ) AS engaged_sessions,
-    ROUND(
-        COUNTIF(event_name = 'page_view') * 1.0 / COUNT(DISTINCT CONCAT(
-            user_pseudo_id, 
-            CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-        )), 2
-    ) AS avg_page_views_per_session,
-    ROUND(
-        SAFE_DIVIDE(
-            COUNT(DISTINCT 
-                CASE WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
-                     THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-                END
-            ),
-            COUNT(DISTINCT CONCAT(
-                user_pseudo_id, 
-                CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-            ))
-        ) * 100, 2
-    ) AS engagement_rate_percentage
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    AND collected_traffic_source.manual_campaign_name = '{utm_campaign_name}'
-    -- LLM: Add additional WHERE clauses as needed
-GROUP BY
-    utm_campaign, utm_campaign_id, utm_source, utm_medium, utm_term, 
-    utm_content, source_platform, creative_format, marketing_tactic
 ORDER BY
     unique_users DESC
 """
@@ -2599,186 +2414,6 @@ ORDER BY
 """
     },
 
-    "analyze_last_click_platform_performance": {
-        "description": "Analyzes campaign performance by source platform using last-click attribution. Good for questions like 'platform performance by last-click', 'which platforms get conversion credit?', 'platform attribution analysis', or 'cross-platform last-click performance'.",
-        "template": """
--- Analyzes source platform performance using last-click attribution
--- LLM: Replace {start_date} and {end_date} with user-specified date range
-SELECT
-    COALESCE(session_traffic_source_last_click.manual_campaign.source_platform, '(source_platform_not_set)') AS last_click_source_platform,
-    COALESCE(session_traffic_source_last_click.manual_campaign.marketing_tactic, '(marketing_tactic_not_set)') AS marketing_tactic,
-    COALESCE(session_traffic_source_last_click.manual_campaign.creative_format, '(creative_format_not_set)') AS creative_format,
-    COUNT(DISTINCT user_pseudo_id) AS attributed_users,
-    COUNT(DISTINCT CONCAT(
-        user_pseudo_id, 
-        CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-    )) AS attributed_sessions,
-    COUNT(DISTINCT session_traffic_source_last_click.manual_campaign.campaign_name) AS unique_campaigns_attributed,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_number') = 1 
-             THEN user_pseudo_id 
-        END
-    ) AS attributed_new_users,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
-             THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-        END
-    ) AS engaged_sessions,
-    COUNTIF(event_name = 'page_view') AS page_views,
-    ROUND(
-        COUNT(DISTINCT CONCAT(
-            user_pseudo_id, 
-            CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-        )) * 1.0 / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS avg_sessions_per_attributed_user,
-    ROUND(
-        SAFE_DIVIDE(
-            COUNT(DISTINCT 
-                CASE WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
-                     THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-                END
-            ),
-            COUNT(DISTINCT CONCAT(
-                user_pseudo_id, 
-                CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-            ))
-        ) * 100, 2
-    ) AS engagement_rate_percentage
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    AND session_traffic_source_last_click.manual_campaign.source_platform IS NOT NULL
-    -- LLM: Apply additional filters as specified
-GROUP BY
-    last_click_source_platform, marketing_tactic, creative_format
-ORDER BY
-    attributed_sessions DESC
-"""
-    },
-
-    "analyze_specific_last_click_campaign": {
-        "description": "Deep dive analysis of a specific campaign using last-click attribution. Good for questions like 'last-click analysis for [campaign_name]', 'how did [campaign] perform in last-click attribution?', 'campaign last-touch deep dive', or 'detailed last-click campaign metrics'.",
-        "template": """
--- Provides comprehensive last-click attribution analysis for a specific campaign
--- LLM: Replace {campaign_name}, {start_date} and {end_date} with user-specified values
-SELECT
-    COALESCE(session_traffic_source_last_click.manual_campaign.campaign_name, 
-             session_traffic_source_last_click.google_ads_campaign.campaign_name) AS campaign_name,
-    COALESCE(session_traffic_source_last_click.manual_campaign.campaign_id, 
-             session_traffic_source_last_click.google_ads_campaign.campaign_id, 
-             '(no_campaign_id)') AS campaign_id,
-    COALESCE(session_traffic_source_last_click.manual_campaign.source, 'Google_Ads') AS traffic_source,
-    COALESCE(session_traffic_source_last_click.manual_campaign.medium, 'cpc') AS traffic_medium,
-    COALESCE(session_traffic_source_last_click.manual_campaign.term, '(no_keywords)') AS keywords_terms,
-    COALESCE(session_traffic_source_last_click.manual_campaign.content, 
-             session_traffic_source_last_click.google_ads_campaign.ad_group_name, 
-             '(no_content_adgroup)') AS content_or_adgroup,
-    COUNT(DISTINCT user_pseudo_id) AS attributed_users,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_number') = 1 
-             THEN user_pseudo_id 
-        END
-    ) AS attributed_new_users,
-    COUNT(DISTINCT CONCAT(
-        user_pseudo_id, 
-        CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-    )) AS attributed_sessions,
-    COUNTIF(event_name = 'page_view') AS page_views,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
-             THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-        END
-    ) AS engaged_sessions,
-    COUNT(*) AS total_events,
-    ROUND(
-        COUNTIF(event_name = 'page_view') * 1.0 / COUNT(DISTINCT CONCAT(
-            user_pseudo_id, 
-            CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-        )), 2
-    ) AS avg_page_views_per_session,
-    ROUND(
-        SAFE_DIVIDE(
-            COUNT(DISTINCT 
-                CASE WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
-                     THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-                END
-            ),
-            COUNT(DISTINCT CONCAT(
-                user_pseudo_id, 
-                CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-            ))
-        ) * 100, 2
-    ) AS engagement_rate_percentage
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    AND (session_traffic_source_last_click.manual_campaign.campaign_name = '{campaign_name}' 
-         OR session_traffic_source_last_click.google_ads_campaign.campaign_name = '{campaign_name}')
-    -- LLM: Include additional WHERE conditions as needed
-GROUP BY
-    campaign_name, campaign_id, traffic_source, traffic_medium, 
-    keywords_terms, content_or_adgroup
-ORDER BY
-    attributed_sessions DESC
-"""
-    },
-        "analyze_performance_by_time_period": {
-        "description": "Analyzes performance trends over different time periods (daily, weekly, monthly). Good for questions like 'daily performance trends', 'weekly user growth', 'monthly analysis', or 'performance over time'.",
-        "template": """
--- Analyzes performance metrics across different time periods for trend analysis
--- LLM: Replace {time_granularity}, {start_date} and {end_date} with user-specified values
--- LLM: {time_granularity} should be 'daily', 'weekly', or 'monthly'
-SELECT
-    CASE 
-        WHEN '{time_granularity}' = 'daily' THEN PARSE_DATE('%Y%m%d', event_date)
-        WHEN '{time_granularity}' = 'weekly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), WEEK(SUNDAY))
-        WHEN '{time_granularity}' = 'monthly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), MONTH)
-        ELSE PARSE_DATE('%Y%m%d', event_date)
-    END AS time_period,
-    COUNT(DISTINCT user_pseudo_id) AS unique_users,
-    COUNT(DISTINCT CONCAT(
-        user_pseudo_id, 
-        CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-    )) AS total_sessions,
-    COUNT(*) AS total_events,
-    COUNTIF(event_name = 'page_view') AS page_views,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_number') = 1 
-             THEN user_pseudo_id 
-        END
-    ) AS new_users,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
-             THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-        END
-    ) AS engaged_sessions,
-    ROUND(
-        SAFE_DIVIDE(
-            COUNT(DISTINCT 
-                CASE WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
-                     THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-                END
-            ),
-            COUNT(DISTINCT CONCAT(
-                user_pseudo_id, 
-                CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-            ))
-        ) * 100, 2
-    ) AS engagement_rate_percentage
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    -- LLM: Add additional filters as specified by user
-GROUP BY
-    time_period
-ORDER BY
-    time_period
-"""
-    },
-
     "analyze_day_of_week_patterns": {
         "description": "Analyzes user behavior patterns by day of the week. Good for questions like 'which days perform best?', 'day of week analysis', 'weekday vs weekend performance', or 'daily usage patterns'.",
         "template": """
@@ -2886,68 +2521,6 @@ ORDER BY
 """
     },
 
-    "compare_time_periods": {
-        "description": "Compares performance between two specific time periods. Good for questions like 'this month vs last month', 'compare periods', 'period over period analysis', or 'year over year comparison'.",
-        "template": """
--- Compares key metrics between two time periods for performance analysis
--- LLM: Replace {period1_start}, {period1_end}, {period2_start}, {period2_end} with user-specified date ranges
--- LLM: Also replace {period1_name} and {period2_name} with descriptive names like 'This Month', 'Last Month'
-WITH period_data AS (
-    SELECT
-        CASE 
-            WHEN _table_suffix BETWEEN '{period1_start}' AND '{period1_end}' THEN '{period1_name}'
-            WHEN _table_suffix BETWEEN '{period2_start}' AND '{period2_end}' THEN '{period2_name}'
-        END AS time_period,
-        user_pseudo_id,
-        (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS session_id,
-        (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') AS session_engaged,
-        (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_number') AS session_number,
-        event_name
-    FROM
-        `{project_id}.{dataset_id}.events_*`
-    WHERE
-        (_table_suffix BETWEEN '{period1_start}' AND '{period1_end}' 
-         OR _table_suffix BETWEEN '{period2_start}' AND '{period2_end}')
-        -- LLM: Add additional WHERE conditions as specified
-)
-SELECT
-    time_period,
-    COUNT(DISTINCT user_pseudo_id) AS unique_users,
-    COUNT(DISTINCT CONCAT(user_pseudo_id, CAST(session_id AS STRING))) AS total_sessions,
-    COUNTIF(event_name = 'page_view') AS page_views,
-    COUNT(DISTINCT 
-        CASE WHEN session_number = 1 THEN user_pseudo_id END
-    ) AS new_users,
-    COUNT(DISTINCT 
-        CASE WHEN session_engaged = '1' 
-             THEN CONCAT(user_pseudo_id, CAST(session_id AS STRING)) 
-        END
-    ) AS engaged_sessions,
-    ROUND(
-        SAFE_DIVIDE(
-            COUNT(DISTINCT 
-                CASE WHEN session_engaged = '1' 
-                     THEN CONCAT(user_pseudo_id, CAST(session_id AS STRING)) 
-                END
-            ),
-            COUNT(DISTINCT CONCAT(user_pseudo_id, CAST(session_id AS STRING)))
-        ) * 100, 2
-    ) AS engagement_rate_percentage,
-    ROUND(
-        COUNT(DISTINCT CONCAT(user_pseudo_id, CAST(session_id AS STRING))) * 1.0 / 
-        COUNT(DISTINCT user_pseudo_id), 2
-    ) AS avg_sessions_per_user
-FROM
-    period_data
-WHERE
-    time_period IS NOT NULL
-GROUP BY
-    time_period
-ORDER BY
-    time_period
-"""
-    },
-
     "analyze_user_acquisition_timing": {
         "description": "Analyzes when users were first acquired over time. Good for questions like 'user acquisition trends', 'when did users first visit?', 'acquisition cohort analysis', or 'first-touch timing analysis'.",
         "template": """
@@ -3047,43 +2620,6 @@ ORDER BY
 """
     },
 
-    "analyze_event_timing_delays": {
-        "description": "Analyzes timing differences between event logging and server processing. Good for questions like 'data collection delays', 'event processing timing', 'data quality timing analysis', or 'real-time vs batch data'.",
-        "template": """
--- Analyzes timing differences between client event logging and server processing
--- LLM: Replace {start_date} and {end_date} with user-specified date range
-SELECT
-    PARSE_DATE('%Y%m%d', event_date) AS event_date,
-    CASE 
-        WHEN event_server_timestamp_offset IS NULL THEN 'No_Offset_Data'
-        WHEN ABS(event_server_timestamp_offset) < 1000000 THEN 'Near_Realtime (< 1sec)'
-        WHEN ABS(event_server_timestamp_offset) < 60000000 THEN 'Short_Delay (1-60sec)'
-        WHEN ABS(event_server_timestamp_offset) < 3600000000 THEN 'Medium_Delay (1-60min)'
-        ELSE 'Long_Delay (> 1hour)'
-    END AS processing_delay_category,
-    COUNT(*) AS event_count,
-    COUNT(DISTINCT user_pseudo_id) AS unique_users,
-    COUNT(DISTINCT CONCAT(
-        user_pseudo_id, 
-        CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-    )) AS total_sessions,
-    AVG(ABS(event_server_timestamp_offset) / 1000000) AS avg_delay_seconds,
-    MIN(ABS(event_server_timestamp_offset) / 1000000) AS min_delay_seconds,
-    MAX(ABS(event_server_timestamp_offset) / 1000000) AS max_delay_seconds,
-    ROUND(
-        COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY PARSE_DATE('%Y%m%d', event_date)), 2
-    ) AS daily_event_share_percentage
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    -- LLM: Include additional WHERE conditions as needed
-GROUP BY
-    event_date, processing_delay_category
-ORDER BY
-    event_date DESC, event_count DESC
-"""
-    },
         "analyze_top_page_performance": {
         "description": "Analyzes top-performing pages by views, users, and engagement. Good for questions like 'which pages are most popular?', 'top page performance', 'best performing content', or 'page popularity analysis'.",
         "template": """
@@ -3099,7 +2635,7 @@ SELECT
         CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
     )) AS unique_sessions,
     ROUND(
-        COUNTIF(event_name = 'page_view') * 1.0 / COUNT(DISTINCT user_pseudo_id), 2
+        COUNTIF(event_name = 'page_view') * 1.0 / NULLIF(COUNT(DISTINCT user_pseudo_id), 0), 2
     ) AS avg_page_views_per_user,
     COUNT(DISTINCT 
         CASE WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
@@ -3107,7 +2643,7 @@ SELECT
         END
     ) AS engaged_sessions_with_page,
     ROUND(
-        COUNTIF(event_name = 'page_view') * 100.0 / SUM(COUNTIF(event_name = 'page_view')) OVER (), 2
+        COUNTIF(event_name = 'page_view') * 100.0 / NULLIF(SUM(COUNTIF(event_name = 'page_view')) OVER (), 0), 2
     ) AS page_view_share_percentage
 FROM
     `{project_id}.{dataset_id}.events_*`
@@ -3406,77 +2942,6 @@ ORDER BY
     page_views DESC
 """
     },
-
-    "analyze_specific_page_performance": {
-        "description": "Deep dive analysis of a specific page's performance. Good for questions like 'how does [page_url] perform?', 'analyze specific page', 'page performance deep dive', or 'detailed page metrics'.",
-        "template": """
--- Provides comprehensive performance analysis for a specific page
--- LLM: Replace {page_url}, {start_date} and {end_date} with user-specified values
-SELECT
-    (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_location' AND event_name = 'page_view') AS page_url,
-    (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_title' AND event_name = 'page_view') AS page_title,
-    COUNTIF(event_name = 'page_view') AS total_page_views,
-    COUNT(DISTINCT user_pseudo_id) AS unique_users,
-    COUNT(DISTINCT CONCAT(
-        user_pseudo_id, 
-        CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-    )) AS unique_sessions_with_page,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'entrances') = 1 
-             THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-        END
-    ) AS entrances_to_page,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_number') = 1 
-             THEN user_pseudo_id 
-        END
-    ) AS new_users_viewing_page,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
-             THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-        END
-    ) AS engaged_sessions_with_page,
-    ROUND(
-        COUNTIF(event_name = 'page_view') * 1.0 / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS avg_page_views_per_user,
-    ROUND(
-        SAFE_DIVIDE(
-            COUNT(DISTINCT 
-                CASE WHEN (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'entrances') = 1 
-                     AND (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
-                     THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-                END
-            ),
-            COUNT(DISTINCT 
-                CASE WHEN (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'entrances') = 1 
-                     THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-                END
-            )
-        ) * 100, 2
-    ) AS landing_page_engagement_rate_percentage,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
-             THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-        END
-    ) * 100.0 / COUNT(DISTINCT CONCAT(
-        user_pseudo_id, 
-        CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-    )) AS overall_engagement_rate_percentage
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    AND event_name = 'page_view'
-    AND (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'page_location') LIKE '%{page_url}%'
-    -- LLM: Add additional WHERE clauses as needed
-GROUP BY
-    page_url, page_title
-HAVING
-    page_url IS NOT NULL
-ORDER BY
-    total_page_views DESC
-"""
-    },
         "analyze_event_performance": {
         "description": "Analyzes performance of different event types. Good for questions like 'which events are most common?', 'event performance analysis', 'user interaction patterns', or 'event tracking overview'.",
         "template": """
@@ -3594,38 +3059,52 @@ funnel_analysis AS (
         user_events
     GROUP BY
         user_pseudo_id, session_id
+),
+funnel_summary AS (
+    SELECT
+        SUM(step_1_page_view) AS total_step_1,
+        SUM(step_2_view_item) AS total_step_2,
+        SUM(step_3_add_to_cart) AS total_step_3,
+        SUM(step_4_begin_checkout) AS total_step_4,
+        SUM(step_5_purchase) AS total_step_5,
+        COUNT(*) AS total_sessions
+    FROM
+        funnel_analysis
 )
 SELECT
     'Step 1: Page Views' AS funnel_step,
-    SUM(step_1_page_view) AS users_completing_step,
-    ROUND(SUM(step_1_page_view) * 100.0 / COUNT(*), 2) AS completion_rate_percentage,
+    total_step_1 AS users_completing_step,
+    ROUND(total_step_1 * 100.0 / NULLIF(total_sessions, 0), 2) AS completion_rate_percentage,
     NULL AS conversion_rate_from_previous_step
+FROM funnel_summary
 UNION ALL
 SELECT
     'Step 2: View Item' AS funnel_step,
-    SUM(step_2_view_item) AS users_completing_step,
-    ROUND(SUM(step_2_view_item) * 100.0 / COUNT(*), 2) AS completion_rate_percentage,
-    ROUND(SUM(step_2_view_item) * 100.0 / SUM(step_1_page_view), 2) AS conversion_rate_from_previous_step
+    total_step_2 AS users_completing_step,
+    ROUND(total_step_2 * 100.0 / NULLIF(total_sessions, 0), 2) AS completion_rate_percentage,
+    ROUND(total_step_2 * 100.0 / NULLIF(total_step_1, 0), 2) AS conversion_rate_from_previous_step
+FROM funnel_summary
 UNION ALL
 SELECT
     'Step 3: Add to Cart' AS funnel_step,
-    SUM(step_3_add_to_cart) AS users_completing_step,
-    ROUND(SUM(step_3_add_to_cart) * 100.0 / COUNT(*), 2) AS completion_rate_percentage,
-    ROUND(SUM(step_3_add_to_cart) * 100.0 / SUM(step_2_view_item), 2) AS conversion_rate_from_previous_step
+    total_step_3 AS users_completing_step,
+    ROUND(total_step_3 * 100.0 / NULLIF(total_sessions, 0), 2) AS completion_rate_percentage,
+    ROUND(total_step_3 * 100.0 / NULLIF(total_step_2, 0), 2) AS conversion_rate_from_previous_step
+FROM funnel_summary
 UNION ALL
 SELECT
     'Step 4: Begin Checkout' AS funnel_step,
-    SUM(step_4_begin_checkout) AS users_completing_step,
-    ROUND(SUM(step_4_begin_checkout) * 100.0 / COUNT(*), 2) AS completion_rate_percentage,
-    ROUND(SUM(step_4_begin_checkout) * 100.0 / SUM(step_3_add_to_cart), 2) AS conversion_rate_from_previous_step
+    total_step_4 AS users_completing_step,
+    ROUND(total_step_4 * 100.0 / NULLIF(total_sessions, 0), 2) AS completion_rate_percentage,
+    ROUND(total_step_4 * 100.0 / NULLIF(total_step_3, 0), 2) AS conversion_rate_from_previous_step
+FROM funnel_summary
 UNION ALL
 SELECT
     'Step 5: Purchase' AS funnel_step,
-    SUM(step_5_purchase) AS users_completing_step,
-    ROUND(SUM(step_5_purchase) * 100.0 / COUNT(*), 2) AS completion_rate_percentage,
-    ROUND(SUM(step_5_purchase) * 100.0 / SUM(step_4_begin_checkout), 2) AS conversion_rate_from_previous_step
-FROM
-    funnel_analysis
+    total_step_5 AS users_completing_step,
+    ROUND(total_step_5 * 100.0 / NULLIF(total_sessions, 0), 2) AS completion_rate_percentage,
+    ROUND(total_step_5 * 100.0 / NULLIF(total_step_4, 0), 2) AS conversion_rate_from_previous_step
+FROM funnel_summary
 ORDER BY
     funnel_step
 """
@@ -3661,49 +3140,6 @@ GROUP BY
     event_name, hour_of_day, day_of_week, time_period
 ORDER BY
     event_name, event_count DESC
-"""
-    },
-
-    "analyze_event_parameter_values": {
-        "description": "Analyzes specific parameter values for events. Good for questions like 'most common [parameter] values', 'parameter value analysis', 'event parameter breakdown', or 'custom parameter insights'.",
-        "template": """
--- Analyzes the distribution and performance of specific event parameter values
--- LLM: Replace {event_name}, {parameter_key}, {start_date} and {end_date} with user-specified values
-SELECT
-    event_name,
-    '{parameter_key}' AS parameter_name,
-    COALESCE(
-        (SELECT value.string_value FROM UNNEST(event_params) WHERE key = '{parameter_key}'),
-        CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = '{parameter_key}') AS STRING),
-        CAST((SELECT value.float_value FROM UNNEST(event_params) WHERE key = '{parameter_key}') AS STRING),
-        CAST((SELECT value.double_value FROM UNNEST(event_params) WHERE key = '{parameter_key}') AS STRING),
-        '(parameter_not_set)'
-    ) AS parameter_value,
-    COUNT(*) AS event_occurrences,
-    COUNT(DISTINCT user_pseudo_id) AS unique_users_with_value,
-    COUNT(DISTINCT CONCAT(
-        user_pseudo_id, 
-        CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-    )) AS sessions_with_value,
-    ROUND(AVG(event_value_in_usd), 2) AS avg_event_value_usd,
-    SUM(event_value_in_usd) AS total_value_usd,
-    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) AS parameter_value_share_percentage,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_number') = 1 
-             THEN user_pseudo_id 
-        END
-    ) AS new_users_with_parameter_value
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    AND event_name = '{event_name}'
-    AND EXISTS (SELECT 1 FROM UNNEST(event_params) WHERE key = '{parameter_key}')
-    -- LLM: Include additional WHERE conditions as specified
-GROUP BY
-    event_name, parameter_value
-ORDER BY
-    event_occurrences DESC
 """
     },
 
@@ -4162,68 +3598,6 @@ ORDER BY
 """
     },
 
-    "analyze_ecommerce_trends_over_time": {
-        "description": "Analyzes ecommerce performance trends over time periods. Good for questions like 'sales trends over time', 'revenue growth analysis', 'seasonal ecommerce patterns', or 'performance by time period'.",
-        "template": """
--- Analyzes ecommerce performance trends across different time periods
--- LLM: Replace {time_granularity}, {start_date} and {end_date} with user-specified values
--- LLM: {time_granularity} should be 'daily', 'weekly', or 'monthly'
-SELECT
-    CASE 
-        WHEN '{time_granularity}' = 'daily' THEN PARSE_DATE('%Y%m%d', event_date)
-        WHEN '{time_granularity}' = 'weekly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), WEEK(SUNDAY))
-        WHEN '{time_granularity}' = 'monthly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), MONTH)
-        ELSE PARSE_DATE('%Y%m%d', event_date)
-    END AS time_period,
-    COUNT(DISTINCT ecommerce.transaction_id) AS transactions,
-    COUNT(DISTINCT user_pseudo_id) AS unique_buyers,
-    SUM(ecommerce.purchase_revenue_in_usd) AS total_revenue_usd,
-    SUM(ecommerce.total_item_quantity) AS items_sold,
-    SUM(ecommerce.unique_items) AS unique_items_sold,
-    ROUND(AVG(ecommerce.purchase_revenue_in_usd), 2) AS avg_order_value_usd,
-    ROUND(AVG(ecommerce.total_item_quantity), 2) AS avg_items_per_order,
-    ROUND(
-        SUM(ecommerce.purchase_revenue_in_usd) / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS revenue_per_buyer,
-    LAG(SUM(ecommerce.purchase_revenue_in_usd)) OVER (ORDER BY 
-        CASE 
-            WHEN '{time_granularity}' = 'daily' THEN PARSE_DATE('%Y%m%d', event_date)
-            WHEN '{time_granularity}' = 'weekly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), WEEK(SUNDAY))
-            WHEN '{time_granularity}' = 'monthly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), MONTH)
-            ELSE PARSE_DATE('%Y%m%d', event_date)
-        END
-    ) AS previous_period_revenue,
-    ROUND(
-        (SUM(ecommerce.purchase_revenue_in_usd) - LAG(SUM(ecommerce.purchase_revenue_in_usd)) OVER (ORDER BY 
-            CASE 
-                WHEN '{time_granularity}' = 'daily' THEN PARSE_DATE('%Y%m%d', event_date)
-                WHEN '{time_granularity}' = 'weekly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), WEEK(SUNDAY))
-                WHEN '{time_granularity}' = 'monthly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), MONTH)
-                ELSE PARSE_DATE('%Y%m%d', event_date)
-            END
-        )) * 100.0 / NULLIF(LAG(SUM(ecommerce.purchase_revenue_in_usd)) OVER (ORDER BY 
-            CASE 
-                WHEN '{time_granularity}' = 'daily' THEN PARSE_DATE('%Y%m%d', event_date)
-                WHEN '{time_granularity}' = 'weekly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), WEEK(SUNDAY))
-                WHEN '{time_granularity}' = 'monthly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), MONTH)
-                ELSE PARSE_DATE('%Y%m%d', event_date)
-            END
-        ), 0), 2
-    ) AS revenue_growth_percentage
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    AND event_name = 'purchase'
-    AND ecommerce.transaction_id IS NOT NULL
-    -- LLM: Include additional WHERE conditions as needed
-GROUP BY
-    time_period
-ORDER BY
-    time_period
-"""
-    },
-
     "analyze_transaction_completeness": {
         "description": "Analyzes data quality and completeness of ecommerce transactions. Good for questions like 'transaction data quality', 'missing ecommerce data', 'data completeness audit', or 'ecommerce tracking health'.",
         "template": """
@@ -4591,17 +3965,17 @@ SELECT
     COALESCE(r.total_refund_amount_usd, 0) AS total_refund_amount_usd,
     COALESCE(r.users_returning_item, 0) AS users_returning_item,
     ROUND(
-        COALESCE(r.total_refunded_quantity, 0) * 100.0 / p.total_purchased_quantity, 2
+        COALESCE(r.total_refunded_quantity, 0) * 100.0 / NULLIF(p.total_purchased_quantity, 0), 2
     ) AS unit_return_rate_percentage,
     ROUND(
-        COALESCE(r.total_refund_amount_usd, 0) * 100.0 / p.total_purchase_revenue_usd, 2
+        COALESCE(r.total_refund_amount_usd, 0) * 100.0 / NULLIF(p.total_purchase_revenue_usd, 0), 2
     ) AS revenue_return_rate_percentage,
     ROUND(
-        COALESCE(r.users_returning_item, 0) * 100.0 / p.buyers_of_item, 2
+        COALESCE(r.users_returning_item, 0) * 100.0 / NULLIF(p.buyers_of_item, 0), 2
     ) AS buyer_return_rate_percentage,
     CASE 
-        WHEN COALESCE(r.total_refunded_quantity, 0) * 100.0 / p.total_purchased_quantity > 10 THEN 'High_Return_Risk'
-        WHEN COALESCE(r.total_refunded_quantity, 0) * 100.0 / p.total_purchased_quantity > 5 THEN 'Medium_Return_Risk'
+        WHEN COALESCE(r.total_refunded_quantity, 0) * 100.0 / NULLIF(p.total_purchased_quantity, 0) > 10 THEN 'High_Return_Risk'
+        WHEN COALESCE(r.total_refunded_quantity, 0) * 100.0 / NULLIF(p.total_purchased_quantity, 0) > 5 THEN 'Medium_Return_Risk'
         ELSE 'Low_Return_Risk'
     END AS return_risk_category
 FROM
@@ -4624,9 +3998,9 @@ SELECT
     COALESCE(items.item_list_name, '(no_list)') AS product_list_name,
     COALESCE(items.item_list_id, '(no_list_id)') AS product_list_id,
     CASE 
-        WHEN items.item_list_index <= 3 THEN 'Top 3 Positions'
-        WHEN items.item_list_index <= 10 THEN 'Positions 4-10'
-        WHEN items.item_list_index <= 20 THEN 'Positions 11-20'
+        WHEN SAFE_CAST(items.item_list_index AS INT64) <= 3 THEN 'Top 3 Positions'
+        WHEN SAFE_CAST(items.item_list_index AS INT64) <= 10 THEN 'Positions 4-10'
+        WHEN SAFE_CAST(items.item_list_index AS INT64) <= 20 THEN 'Positions 11-20'
         ELSE 'Position 20+'
     END AS list_position_group,
     COUNT(DISTINCT items.item_id) AS unique_products_in_list,
@@ -4634,21 +4008,21 @@ SELECT
     SUM(items.item_revenue_in_usd) AS total_revenue_from_list_usd,
     COUNT(DISTINCT user_pseudo_id) AS unique_buyers_from_list,
     COUNT(DISTINCT ecommerce.transaction_id) AS transactions_from_list,
-    ROUND(AVG(items.item_list_index), 1) AS avg_list_position,
+    ROUND(AVG(SAFE_CAST(items.item_list_index AS INT64)), 1) AS avg_list_position,
     ROUND(AVG(items.price_in_usd), 2) AS avg_item_price_in_list,
     ROUND(
-        SUM(items.item_revenue_in_usd) / COUNT(DISTINCT user_pseudo_id), 2
+        SUM(items.item_revenue_in_usd) / NULLIF(COUNT(DISTINCT user_pseudo_id), 0), 2
     ) AS revenue_per_list_buyer,
     ROUND(
-        SUM(items.item_revenue_in_usd) / SUM(items.quantity), 2
+        SUM(items.item_revenue_in_usd) / NULLIF(SUM(items.quantity), 0), 2
     ) AS revenue_per_unit_from_list,
     ROUND(
         COUNT(DISTINCT user_pseudo_id) * 100.0 / 
-        SUM(COUNT(DISTINCT user_pseudo_id)) OVER (), 2
+        NULLIF(SUM(COUNT(DISTINCT user_pseudo_id)) OVER (), 0), 2
     ) AS buyer_share_percentage,
     ROUND(
         SUM(items.item_revenue_in_usd) * 100.0 / 
-        SUM(SUM(items.item_revenue_in_usd)) OVER (), 2
+        NULLIF(SUM(SUM(items.item_revenue_in_usd)) OVER (), 0), 2
     ) AS revenue_share_percentage,
     COUNT(DISTINCT items.item_brand) AS brands_in_list,
     COUNT(DISTINCT items.item_category) AS categories_in_list
@@ -4665,457 +4039,6 @@ GROUP BY
     product_list_name, product_list_id, list_position_group
 ORDER BY
     total_revenue_from_list_usd DESC
-"""
-    },
-
-    "analyze_specific_product_performance": {
-        "description": "Deep dive analysis of a specific product's performance. Good for questions like 'analyze product [item_name]', 'detailed product performance', 'specific item analysis', or 'product deep dive'.",
-        "template": """
--- Provides comprehensive analysis of a specific product's performance
--- LLM: Replace {item_id_or_name}, {start_date} and {end_date} with user-specified values
-SELECT
-    items.item_id,
-    items.item_name,
-    items.item_brand,
-    items.item_category,
-    items.item_category2,
-    items.item_category3,
-    items.item_variant,
-    SUM(items.quantity) AS total_quantity_sold,
-    SUM(items.item_revenue_in_usd) AS total_item_revenue_usd,
-    COUNT(DISTINCT user_pseudo_id) AS unique_buyers,
-    COUNT(DISTINCT ecommerce.transaction_id) AS transactions_containing_item,
-    ROUND(AVG(items.price_in_usd), 2) AS avg_selling_price_usd,
-    ROUND(MIN(items.price_in_usd), 2) AS min_selling_price_usd,
-    ROUND(MAX(items.price_in_usd), 2) AS max_selling_price_usd,
-    ROUND(AVG(items.quantity), 2) AS avg_quantity_per_transaction,
-    ROUND(
-        SUM(items.item_revenue_in_usd) / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS revenue_per_buyer,
-    ROUND(
-        SUM(items.item_revenue_in_usd) / SUM(items.quantity), 2
-    ) AS revenue_per_unit,
-    COUNT(DISTINCT 
-        CASE WHEN items.coupon IS NOT NULL THEN ecommerce.transaction_id END
-    ) AS transactions_with_coupon,
-    ROUND(
-        COUNT(DISTINCT 
-            CASE WHEN items.coupon IS NOT NULL THEN ecommerce.transaction_id END
-        ) * 100.0 / COUNT(DISTINCT ecommerce.transaction_id), 2
-    ) AS coupon_usage_rate_percentage,
-    COUNT(DISTINCT items.item_list_name) AS different_lists_appeared_in,
-    STRING_AGG(DISTINCT items.item_list_name, ', ' ORDER BY items.item_list_name) AS lists_appeared_in,
-    COUNT(DISTINCT items.coupon) AS different_coupons_used,
-    STRING_AGG(DISTINCT items.coupon, ', ' ORDER BY items.coupon) AS coupons_used,
-    COUNT(DISTINCT items.affiliation) AS different_affiliations,
-    COUNT(DISTINCT items.location_id) AS different_locations
-FROM
-    `{project_id}.{dataset_id}.events_*`,
-    UNNEST(items) AS items
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    AND event_name = 'purchase'
-    AND (items.item_id = '{item_id_or_name}' OR items.item_name = '{item_id_or_name}')
-    -- LLM: Add additional WHERE clauses as needed
-GROUP BY
-    items.item_id, items.item_name, items.item_brand, items.item_category,
-    items.item_category2, items.item_category3, items.item_variant
-ORDER BY
-    total_item_revenue_usd DESC
-"""
-    },
-        "analyze_privacy_consent_distribution": {
-        "description": "Analyzes user privacy consent patterns and storage preferences. Good for questions like 'privacy consent rates', 'analytics vs ads storage consent', 'consent distribution analysis', or 'privacy compliance overview'.",
-        "template": """
--- Analyzes distribution of privacy consent settings across users
--- LLM: Replace {start_date} and {end_date} with user-specified date range
-SELECT
-    CASE 
-        WHEN privacy_info.analytics_storage = 'Yes' THEN 'Analytics_Consent_Granted'
-        WHEN privacy_info.analytics_storage = 'No' THEN 'Analytics_Consent_Denied'
-        ELSE 'Analytics_Consent_Unknown'
-    END AS analytics_storage_consent,
-    CASE 
-        WHEN privacy_info.ads_storage = 'Yes' THEN 'Ads_Consent_Granted'
-        WHEN privacy_info.ads_storage = 'No' THEN 'Ads_Consent_Denied'
-        ELSE 'Ads_Consent_Unknown'
-    END AS ads_storage_consent,
-    CASE 
-        WHEN privacy_info.uses_transient_token = 'Yes' THEN 'Uses_Transient_Token'
-        WHEN privacy_info.uses_transient_token = 'No' THEN 'No_Transient_Token'
-        ELSE 'Transient_Token_Unknown'
-    END AS transient_token_usage,
-    COUNT(DISTINCT user_pseudo_id) AS unique_users,
-    COUNT(DISTINCT CONCAT(
-        user_pseudo_id, 
-        CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-    )) AS total_sessions,
-    COUNT(*) AS total_events,
-    COUNTIF(event_name = 'page_view') AS page_views,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_number') = 1 
-             THEN user_pseudo_id 
-        END
-    ) AS new_users,
-    ROUND(
-        COUNT(DISTINCT user_pseudo_id) * 100.0 / 
-        SUM(COUNT(DISTINCT user_pseudo_id)) OVER (), 2
-    ) AS user_share_percentage,
-    ROUND(
-        COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2
-    ) AS event_share_percentage
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    -- LLM: Add additional filters as specified by user
-GROUP BY
-    analytics_storage_consent, ads_storage_consent, transient_token_usage
-ORDER BY
-    unique_users DESC
-"""
-    },
-
-    "analyze_consent_impact_on_behavior": {
-        "description": "Analyzes how privacy consent choices affect user behavior and engagement. Good for questions like 'do consent choices affect engagement?', 'behavior by consent status', 'privacy impact on user activity', or 'consent vs engagement analysis'.",
-        "template": """
--- Analyzes user behavior patterns based on privacy consent choices
--- LLM: Replace {start_date} and {end_date} with user-specified date range
-SELECT
-    CASE 
-        WHEN privacy_info.analytics_storage = 'Yes' AND privacy_info.ads_storage = 'Yes' THEN 'Full_Consent'
-        WHEN privacy_info.analytics_storage = 'Yes' AND privacy_info.ads_storage = 'No' THEN 'Analytics_Only'
-        WHEN privacy_info.analytics_storage = 'No' AND privacy_info.ads_storage = 'Yes' THEN 'Ads_Only'
-        WHEN privacy_info.analytics_storage = 'No' AND privacy_info.ads_storage = 'No' THEN 'No_Consent'
-        ELSE 'Mixed_or_Unknown'
-    END AS consent_category,
-    COUNT(DISTINCT user_pseudo_id) AS unique_users,
-    COUNT(DISTINCT CONCAT(
-        user_pseudo_id, 
-        CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-    )) AS total_sessions,
-    COUNTIF(event_name = 'page_view') AS page_views,
-    COUNT(DISTINCT 
-        CASE WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
-             THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-        END
-    ) AS engaged_sessions,
-    COUNT(DISTINCT 
-        CASE WHEN event_name = 'purchase' THEN user_pseudo_id END
-    ) AS users_making_purchases,
-    ROUND(
-        COUNT(DISTINCT CONCAT(
-            user_pseudo_id, 
-            CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-        )) * 1.0 / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS avg_sessions_per_user,
-    ROUND(
-        COUNTIF(event_name = 'page_view') * 1.0 / COUNT(DISTINCT CONCAT(
-            user_pseudo_id, 
-            CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-        )), 2
-    ) AS avg_page_views_per_session,
-    ROUND(
-        SAFE_DIVIDE(
-            COUNT(DISTINCT 
-                CASE WHEN (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'session_engaged') = '1' 
-                     THEN CONCAT(user_pseudo_id, CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING))
-                END
-            ),
-            COUNT(DISTINCT CONCAT(
-                user_pseudo_id, 
-                CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-            ))
-        ) * 100, 2
-    ) AS engagement_rate_percentage,
-    ROUND(
-        COUNT(DISTINCT 
-            CASE WHEN event_name = 'purchase' THEN user_pseudo_id END
-        ) * 100.0 / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS purchase_conversion_rate_percentage
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    -- LLM: Include user-specified WHERE conditions
-GROUP BY
-    consent_category
-ORDER BY
-    unique_users DESC
-"""
-    },
-
-    "analyze_consent_by_geography": {
-        "description": "Analyzes privacy consent patterns by geographic location. Good for questions like 'consent rates by country', 'geographic privacy patterns', 'regional consent compliance', or 'GDPR impact analysis'.",
-        "template": """
--- Analyzes privacy consent patterns across different geographic regions
--- LLM: Replace {start_date} and {end_date} with user-specified date range
-SELECT
-    COALESCE(geo.country, 'Unknown_Country') AS country,
-    COALESCE(geo.continent, 'Unknown_Continent') AS continent,
-    COUNT(DISTINCT user_pseudo_id) AS total_users,
-    COUNT(DISTINCT 
-        CASE WHEN privacy_info.analytics_storage = 'Yes' THEN user_pseudo_id END
-    ) AS users_consenting_to_analytics,
-    COUNT(DISTINCT 
-        CASE WHEN privacy_info.ads_storage = 'Yes' THEN user_pseudo_id END
-    ) AS users_consenting_to_ads,
-    COUNT(DISTINCT 
-        CASE WHEN privacy_info.uses_transient_token = 'Yes' THEN user_pseudo_id END
-    ) AS users_using_transient_tokens,
-    COUNT(DISTINCT 
-        CASE WHEN privacy_info.analytics_storage = 'Yes' AND privacy_info.ads_storage = 'Yes' 
-             THEN user_pseudo_id END
-    ) AS users_with_full_consent,
-    ROUND(
-        COUNT(DISTINCT 
-            CASE WHEN privacy_info.analytics_storage = 'Yes' THEN user_pseudo_id END
-        ) * 100.0 / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS analytics_consent_rate_percentage,
-    ROUND(
-        COUNT(DISTINCT 
-            CASE WHEN privacy_info.ads_storage = 'Yes' THEN user_pseudo_id END
-        ) * 100.0 / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS ads_consent_rate_percentage,
-    ROUND(
-        COUNT(DISTINCT 
-            CASE WHEN privacy_info.analytics_storage = 'Yes' AND privacy_info.ads_storage = 'Yes' 
-                 THEN user_pseudo_id END
-        ) * 100.0 / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS full_consent_rate_percentage,
-    ROUND(
-        COUNT(DISTINCT 
-            CASE WHEN privacy_info.uses_transient_token = 'Yes' THEN user_pseudo_id END
-        ) * 100.0 / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS transient_token_usage_rate_percentage
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    -- LLM: Apply additional filters as needed
-GROUP BY
-    country, continent
-HAVING
-    total_users >= 10  -- Filter for meaningful sample sizes
-ORDER BY
-    total_users DESC
-"""
-    },
-
-    "analyze_consent_trends_over_time": {
-        "description": "Analyzes how privacy consent patterns change over time. Good for questions like 'consent trends over time', 'privacy adoption rates', 'consent pattern changes', or 'privacy policy impact analysis'.",
-        "template": """
--- Analyzes privacy consent trends across different time periods
--- LLM: Replace {time_granularity}, {start_date} and {end_date} with user-specified values
--- LLM: {time_granularity} should be 'daily', 'weekly', or 'monthly'
-SELECT
-    CASE 
-        WHEN '{time_granularity}' = 'daily' THEN PARSE_DATE('%Y%m%d', event_date)
-        WHEN '{time_granularity}' = 'weekly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), WEEK(SUNDAY))
-        WHEN '{time_granularity}' = 'monthly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), MONTH)
-        ELSE PARSE_DATE('%Y%m%d', event_date)
-    END AS time_period,
-    COUNT(DISTINCT user_pseudo_id) AS total_users,
-    COUNT(DISTINCT 
-        CASE WHEN privacy_info.analytics_storage = 'Yes' THEN user_pseudo_id END
-    ) AS users_consenting_to_analytics,
-    COUNT(DISTINCT 
-        CASE WHEN privacy_info.ads_storage = 'Yes' THEN user_pseudo_id END
-    ) AS users_consenting_to_ads,
-    COUNT(DISTINCT 
-        CASE WHEN privacy_info.analytics_storage = 'Yes' AND privacy_info.ads_storage = 'Yes' 
-             THEN user_pseudo_id END
-    ) AS users_with_full_consent,
-    ROUND(
-        COUNT(DISTINCT 
-            CASE WHEN privacy_info.analytics_storage = 'Yes' THEN user_pseudo_id END
-        ) * 100.0 / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS analytics_consent_rate_percentage,
-    ROUND(
-        COUNT(DISTINCT 
-            CASE WHEN privacy_info.ads_storage = 'Yes' THEN user_pseudo_id END
-        ) * 100.0 / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS ads_consent_rate_percentage,
-    ROUND(
-        COUNT(DISTINCT 
-            CASE WHEN privacy_info.analytics_storage = 'Yes' AND privacy_info.ads_storage = 'Yes' 
-                 THEN user_pseudo_id END
-        ) * 100.0 / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS full_consent_rate_percentage,
-    LAG(ROUND(
-        COUNT(DISTINCT 
-            CASE WHEN privacy_info.analytics_storage = 'Yes' THEN user_pseudo_id END
-        ) * 100.0 / COUNT(DISTINCT user_pseudo_id), 2
-    )) OVER (ORDER BY 
-        CASE 
-            WHEN '{time_granularity}' = 'daily' THEN PARSE_DATE('%Y%m%d', event_date)
-            WHEN '{time_granularity}' = 'weekly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), WEEK(SUNDAY))
-            WHEN '{time_granularity}' = 'monthly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), MONTH)
-            ELSE PARSE_DATE('%Y%m%d', event_date)
-        END
-    ) AS previous_analytics_consent_rate,
-    ROUND(
-        (COUNT(DISTINCT 
-            CASE WHEN privacy_info.analytics_storage = 'Yes' THEN user_pseudo_id END
-        ) * 100.0 / COUNT(DISTINCT user_pseudo_id)) - 
-        LAG(COUNT(DISTINCT 
-            CASE WHEN privacy_info.analytics_storage = 'Yes' THEN user_pseudo_id END
-        ) * 100.0 / COUNT(DISTINCT user_pseudo_id)) OVER (ORDER BY 
-            CASE 
-                WHEN '{time_granularity}' = 'daily' THEN PARSE_DATE('%Y%m%d', event_date)
-                WHEN '{time_granularity}' = 'weekly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), WEEK(SUNDAY))
-                WHEN '{time_granularity}' = 'monthly' THEN DATE_TRUNC(PARSE_DATE('%Y%m%d', event_date), MONTH)
-                ELSE PARSE_DATE('%Y%m%d', event_date)
-            END
-        ), 2
-    ) AS analytics_consent_rate_change
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    -- LLM: Include additional filtering conditions
-GROUP BY
-    time_period
-ORDER BY
-    time_period
-"""
-    },
-
-    "analyze_privacy_compliance_summary": {
-        "description": "Provides a comprehensive privacy compliance overview for business reporting. Good for questions like 'privacy compliance report', 'consent management summary', 'privacy overview for executives', or 'consent compliance dashboard'.",
-        "template": """
--- Provides comprehensive privacy and consent compliance overview
--- LLM: Replace {start_date} and {end_date} with user-specified date range
-WITH privacy_summary AS (
-    SELECT
-        privacy_info.analytics_storage,
-        privacy_info.ads_storage,
-        privacy_info.uses_transient_token,
-        COUNT(DISTINCT user_pseudo_id) AS users,
-        COUNT(DISTINCT CONCAT(
-            user_pseudo_id, 
-            CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)
-        )) AS sessions,
-        COUNT(*) AS events
-    FROM
-        `{project_id}.{dataset_id}.events_*`
-    WHERE
-        _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-        -- LLM: Apply additional filters as specified
-    GROUP BY
-        analytics_storage, ads_storage, uses_transient_token
-)
-SELECT
-    -- Overall compliance metrics
-    SUM(users) AS total_users_tracked,
-    SUM(sessions) AS total_sessions_tracked,
-    SUM(events) AS total_events_tracked,
-    
-    -- Analytics storage consent
-    SUM(CASE WHEN analytics_storage = 'Yes' THEN users ELSE 0 END) AS users_consenting_to_analytics,
-    SUM(CASE WHEN analytics_storage = 'No' THEN users ELSE 0 END) AS users_declining_analytics,
-    SUM(CASE WHEN analytics_storage IS NULL THEN users ELSE 0 END) AS users_unknown_analytics_consent,
-    
-    -- Ads storage consent
-    SUM(CASE WHEN ads_storage = 'Yes' THEN users ELSE 0 END) AS users_consenting_to_ads,
-    SUM(CASE WHEN ads_storage = 'No' THEN users ELSE 0 END) AS users_declining_ads,
-    SUM(CASE WHEN ads_storage IS NULL THEN users ELSE 0 END) AS users_unknown_ads_consent,
-    
-    -- Transient token usage
-    SUM(CASE WHEN uses_transient_token = 'Yes' THEN users ELSE 0 END) AS users_with_transient_tokens,
-    SUM(CASE WHEN uses_transient_token = 'No' THEN users ELSE 0 END) AS users_without_transient_tokens,
-    
-    -- Combined consent patterns
-    SUM(CASE WHEN analytics_storage = 'Yes' AND ads_storage = 'Yes' THEN users ELSE 0 END) AS users_full_consent,
-    SUM(CASE WHEN analytics_storage = 'No' AND ads_storage = 'No' THEN users ELSE 0 END) AS users_no_consent,
-    SUM(CASE WHEN analytics_storage = 'Yes' AND ads_storage = 'No' THEN users ELSE 0 END) AS users_analytics_only,
-    SUM(CASE WHEN analytics_storage = 'No' AND ads_storage = 'Yes' THEN users ELSE 0 END) AS users_ads_only,
-    
-    -- Consent rate calculations
-    ROUND(
-        SUM(CASE WHEN analytics_storage = 'Yes' THEN users ELSE 0 END) * 100.0 / SUM(users), 2
-    ) AS analytics_consent_rate_percentage,
-    ROUND(
-        SUM(CASE WHEN ads_storage = 'Yes' THEN users ELSE 0 END) * 100.0 / SUM(users), 2
-    ) AS ads_consent_rate_percentage,
-    ROUND(
-        SUM(CASE WHEN analytics_storage = 'Yes' AND ads_storage = 'Yes' THEN users ELSE 0 END) * 100.0 / SUM(users), 2
-    ) AS full_consent_rate_percentage,
-    ROUND(
-        SUM(CASE WHEN uses_transient_token = 'Yes' THEN users ELSE 0 END) * 100.0 / SUM(users), 2
-    ) AS transient_token_usage_rate_percentage,
-    
-    -- Data quality indicators
-    ROUND(
-        SUM(CASE WHEN analytics_storage IS NOT NULL THEN users ELSE 0 END) * 100.0 / SUM(users), 2
-    ) AS analytics_consent_data_completeness_percentage,
-    ROUND(
-        SUM(CASE WHEN ads_storage IS NOT NULL THEN users ELSE 0 END) * 100.0 / SUM(users), 2
-    ) AS ads_consent_data_completeness_percentage
-FROM
-    privacy_summary
-"""
-    },
-
-    "analyze_consent_by_traffic_source": {
-        "description": "Analyzes privacy consent patterns by traffic source and acquisition channel. Good for questions like 'consent rates by traffic source', 'acquisition channel privacy patterns', 'how consent varies by source', or 'privacy by marketing channel'.",
-        "template": """
--- Analyzes privacy consent patterns across different traffic sources and channels
--- LLM: Replace {start_date} and {end_date} with user-specified date range
-SELECT
-    COALESCE(traffic_source.source, '(direct)') AS traffic_source,
-    COALESCE(traffic_source.medium, '(none)') AS traffic_medium,
-    CONCAT(
-        COALESCE(traffic_source.source, '(direct)'), 
-        ' / ', 
-        COALESCE(traffic_source.medium, '(none)')
-    ) AS source_medium,
-    COUNT(DISTINCT user_pseudo_id) AS total_users,
-    COUNT(DISTINCT 
-        CASE WHEN privacy_info.analytics_storage = 'Yes' THEN user_pseudo_id END
-    ) AS users_consenting_to_analytics,
-    COUNT(DISTINCT 
-        CASE WHEN privacy_info.ads_storage = 'Yes' THEN user_pseudo_id END
-    ) AS users_consenting_to_ads,
-    COUNT(DISTINCT 
-        CASE WHEN privacy_info.analytics_storage = 'Yes' AND privacy_info.ads_storage = 'Yes' 
-             THEN user_pseudo_id END
-    ) AS users_with_full_consent,
-    COUNT(DISTINCT 
-        CASE WHEN privacy_info.analytics_storage = 'No' AND privacy_info.ads_storage = 'No' 
-             THEN user_pseudo_id END
-    ) AS users_with_no_consent,
-    ROUND(
-        COUNT(DISTINCT 
-            CASE WHEN privacy_info.analytics_storage = 'Yes' THEN user_pseudo_id END
-        ) * 100.0 / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS analytics_consent_rate_percentage,
-    ROUND(
-        COUNT(DISTINCT 
-            CASE WHEN privacy_info.ads_storage = 'Yes' THEN user_pseudo_id END
-        ) * 100.0 / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS ads_consent_rate_percentage,
-    ROUND(
-        COUNT(DISTINCT 
-            CASE WHEN privacy_info.analytics_storage = 'Yes' AND privacy_info.ads_storage = 'Yes' 
-                 THEN user_pseudo_id END
-        ) * 100.0 / COUNT(DISTINCT user_pseudo_id), 2
-    ) AS full_consent_rate_percentage,
-    ROUND(
-        COUNT(DISTINCT user_pseudo_id) * 100.0 / 
-        SUM(COUNT(DISTINCT user_pseudo_id)) OVER (), 2
-    ) AS traffic_share_percentage
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    -- LLM: Include user-specified WHERE conditions
-GROUP BY
-    traffic_source, traffic_medium, source_medium
-HAVING
-    total_users >= 10  -- Filter for meaningful sample sizes
-ORDER BY
-    total_users DESC
 """
     }
 }
