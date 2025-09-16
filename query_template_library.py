@@ -592,69 +592,79 @@ ORDER BY
         "template": """
 -- Classifies users into default channel groups based on traffic source attribution
 -- LLM: Replace {start_date} and {end_date} with user-specified date range
+WITH first_touch_attribution AS (
+    SELECT
+        user_pseudo_id,
+        FIRST_VALUE(traffic_source.source) OVER (PARTITION BY user_pseudo_id ORDER BY event_timestamp ASC) AS first_user_source,
+        FIRST_VALUE(traffic_source.medium) OVER (PARTITION BY user_pseudo_id ORDER BY event_timestamp ASC) AS first_user_medium,
+        FIRST_VALUE(traffic_source.name) OVER (PARTITION BY user_pseudo_id ORDER BY event_timestamp ASC) AS first_user_campaign,
+        ROW_NUMBER() OVER (PARTITION BY user_pseudo_id ORDER BY event_timestamp ASC) as user_event_rank
+    FROM
+        `{project_id}.{dataset_id}.events_*`
+    WHERE
+        _table_suffix BETWEEN '{start_date}' AND '{end_date}'
+)
 SELECT
     CASE
-        WHEN (traffic_source.source IS NULL OR traffic_source.source = '(direct)') 
-             AND (traffic_source.medium IS NULL OR traffic_source.medium IN ('(not set)', '(none)')) 
-             THEN 'Direct_Access'
-        WHEN traffic_source.name LIKE '%cross-network%' 
-             THEN 'Cross_Network'
-        WHEN (REGEXP_CONTAINS(traffic_source.source, 'alibaba|amazon|google shopping|shopify|etsy|ebay|stripe|walmart')
-              OR REGEXP_CONTAINS(traffic_source.name, r'^(.*(([^a-df-z]|^)shop|shopping).*)$'))
-             AND REGEXP_CONTAINS(traffic_source.medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
-             THEN 'Paid_Shopping'
-        WHEN REGEXP_CONTAINS(traffic_source.source, 'baidu|bing|duckduckgo|ecosia|google|yahoo|yandex') 
-             AND REGEXP_CONTAINS(traffic_source.medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
-             THEN 'Paid_Search'
-        WHEN REGEXP_CONTAINS(traffic_source.source, 'badoo|facebook|fb|instagram|linkedin|pinterest|tiktok|twitter|whatsapp')
-             AND REGEXP_CONTAINS(traffic_source.medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
-             THEN 'Paid_Social'
-        WHEN REGEXP_CONTAINS(traffic_source.source, 'dailymotion|disneyplus|netflix|youtube|vimeo|twitch') 
-             AND REGEXP_CONTAINS(traffic_source.medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
-             THEN 'Paid_Video'
-        WHEN traffic_source.medium IN ('display', 'banner', 'expandable', 'interstitial', 'cpm') 
-             THEN 'Display_Advertising'
-        WHEN REGEXP_CONTAINS(traffic_source.medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
-             THEN 'Paid_Other'
-        WHEN REGEXP_CONTAINS(traffic_source.source, 'alibaba|amazon|google shopping|shopify|etsy|ebay|stripe|walmart') 
-             OR REGEXP_CONTAINS(traffic_source.name, r'^(.*(([^a-df-z]|^)shop|shopping).*)$') 
-             THEN 'Organic_Shopping'
-        WHEN REGEXP_CONTAINS(traffic_source.source, 'badoo|facebook|fb|instagram|linkedin|pinterest|tiktok|twitter|whatsapp') 
-             OR traffic_source.medium IN ('social', 'social-network', 'social-media', 'sm', 'social network', 'social media') 
-             THEN 'Organic_Social'
-        WHEN REGEXP_CONTAINS(traffic_source.source, 'dailymotion|disneyplus|netflix|youtube|vimeo|twitch') 
-             OR REGEXP_CONTAINS(traffic_source.medium, r'^(.*video.*)$') 
-             THEN 'Organic_Video'
-        WHEN REGEXP_CONTAINS(traffic_source.source, 'baidu|bing|duckduckgo|ecosia|google|yahoo|yandex') 
-             OR traffic_source.medium = 'organic' 
-             THEN 'Organic_Search'
-        WHEN traffic_source.medium IN ('referral', 'app', 'link') 
-             THEN 'Referral_Traffic'
-        WHEN REGEXP_CONTAINS(traffic_source.source, 'email|e-mail|e_mail|e mail') 
-             OR REGEXP_CONTAINS(traffic_source.medium, 'email|e-mail|e_mail|e mail') 
-             THEN 'Email_Marketing'
-        WHEN traffic_source.medium = 'affiliate' 
-             THEN 'Affiliate_Marketing'
-        WHEN traffic_source.medium = 'audio' 
-             THEN 'Audio_Advertising'
-        WHEN traffic_source.source = 'sms' OR traffic_source.medium = 'sms' 
-             THEN 'SMS_Marketing'
-        WHEN traffic_source.medium LIKE '%push' 
-             OR REGEXP_CONTAINS(traffic_source.medium, 'mobile|notification') 
-             OR traffic_source.source = 'firebase' 
-             THEN 'Push_Notifications'
-        ELSE 'Unclassified'
-    END AS user_channel_group,
-    COUNT(DISTINCT user_pseudo_id) AS user_count
-FROM
-    `{project_id}.{dataset_id}.events_*`
-WHERE
-    _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-    -- LLM: Add additional WHERE clauses based on user requirements
+        WHEN (first_user_source IS NULL OR first_user_source = '(direct)') 
+             AND (first_user_medium IS NULL OR first_user_medium IN ('(not set)', '(none)')) 
+             THEN 'Direct'
+        WHEN first_user_campaign LIKE '%cross-network%' 
+             THEN 'Cross-network'
+        WHEN (REGEXP_CONTAINS(first_user_source, 'alibaba|amazon|google shopping|shopify|etsy|ebay|stripe|walmart|bunnings|jbhifi|harveynorman|kogan|theiconic|catch')
+              OR REGEXP_CONTAINS(first_user_campaign, r'^(.*(([^a-df-z]|^)shop|shopping).*)$'))
+             AND REGEXP_CONTAINS(first_user_medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
+             THEN 'Paid Shopping'
+        WHEN REGEXP_CONTAINS(first_user_source, 'bing|duckduckgo|google|yahoo') 
+             AND REGEXP_CONTAINS(first_user_medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
+             THEN 'Paid Search'
+        WHEN REGEXP_CONTAINS(first_user_source, 'badoo|facebook|fb|instagram|linkedin|pinterest|tiktok|twitter|whatsapp')
+             AND REGEXP_CONTAINS(first_user_medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
+             THEN 'Paid Social'
+        WHEN REGEXP_CONTAINS(first_user_source, 'dailymotion|disneyplus|netflix|youtube|vimeo|twitch|stan|binge|kayo|9now|7plus|sbsondemand') 
+             AND REGEXP_CONTAINS(first_user_medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
+             THEN 'Paid Video'
+        WHEN first_user_medium IN ('display', 'banner', 'expandable', 'interstitial', 'cpm') 
+             THEN 'Display'
+        WHEN REGEXP_CONTAINS(first_user_medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
+             THEN 'Paid Other'
+        WHEN REGEXP_CONTAINS(first_user_source, 'alibaba|amazon|google shopping|shopify|etsy|ebay|stripe|walmart|bunnings|jbhifi|harveynorman|kogan|theiconic|catch') 
+             OR REGEXP_CONTAINS(first_user_campaign, r'^(.*(([^a-df-z]|^)shop|shopping).*)$') 
+             THEN 'Organic Shopping'
+        WHEN REGEXP_CONTAINS(first_user_source, 'badoo|facebook|fb|instagram|linkedin|pinterest|tiktok|twitter|whatsapp') 
+             OR first_user_medium IN ('social', 'social-network', 'social-media', 'sm', 'social network', 'social media') 
+             THEN 'Organic Social'
+        WHEN REGEXP_CONTAINS(first_user_source, 'dailymotion|disneyplus|netflix|youtube|vimeo|twitch|stan|binge|kayo|9now|7plus|sbsondemand') 
+             OR REGEXP_CONTAINS(first_user_medium, r'^(.*video.*)$') 
+             THEN 'Organic Video'
+        WHEN REGEXP_CONTAINS(first_user_source, 'bing|duckduckgo|google|yahoo') 
+             OR first_user_medium = 'organic' 
+             THEN 'Organic Search'
+        WHEN first_user_medium IN ('referral', 'app', 'link') 
+             THEN 'Referral'
+        WHEN REGEXP_CONTAINS(first_user_source, 'email|e-mail|e_mail|e mail') 
+             OR REGEXP_CONTAINS(first_user_medium, 'email|e-mail|e_mail|e mail') 
+             THEN 'Email'
+        WHEN first_user_medium = 'affiliate' 
+             THEN 'Affiliates'
+        WHEN first_user_medium = 'audio' 
+             THEN 'Audio'
+        WHEN first_user_source = 'sms' OR first_user_medium = 'sms' 
+             THEN 'SMS'
+        WHEN first_user_medium LIKE '%push' 
+             OR REGEXP_CONTAINS(first_user_medium, 'mobile|notification') 
+             OR first_user_source = 'firebase' 
+             THEN 'Mobile Push Notifications'
+        ELSE 'Unassigned'
+    END AS `First User Channel`,
+    COUNT(DISTINCT user_pseudo_id) AS `Users`
+FROM 
+    first_touch_attribution
+WHERE user_event_rank = 1
 GROUP BY
-    user_channel_group
+    `First User Channel`
 ORDER BY
-    user_count DESC
+    `Users` DESC
 """
     },
 
@@ -663,91 +673,91 @@ ORDER BY
         "template": """
 -- Classifies sessions into default channel groups based on attribution data
 -- LLM: Replace {start_date} and {end_date} with user-specified date range
-WITH session_attribution AS (
+WITH session_event_attribution AS (
     SELECT
         user_pseudo_id,
         (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS session_identifier,
-        ARRAY_AGG(
-            (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'source') 
-            IGNORE NULLS ORDER BY event_timestamp
-        )[SAFE_OFFSET(0)] AS traffic_source,
-        ARRAY_AGG(
-            (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'medium') 
-            IGNORE NULLS ORDER BY event_timestamp
-        )[SAFE_OFFSET(0)] AS traffic_medium,
-        ARRAY_AGG(
-            (SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'campaign') 
-            IGNORE NULLS ORDER BY event_timestamp
-        )[SAFE_OFFSET(0)] AS marketing_campaign
+        FIRST_VALUE((SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'source') IGNORE NULLS) 
+            OVER (PARTITION BY user_pseudo_id, (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') ORDER BY event_timestamp ASC) AS session_source,
+        FIRST_VALUE((SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'medium') IGNORE NULLS) 
+            OVER (PARTITION BY user_pseudo_id, (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') ORDER BY event_timestamp ASC) AS session_medium,
+        FIRST_VALUE((SELECT value.string_value FROM UNNEST(event_params) WHERE key = 'campaign') IGNORE NULLS) 
+            OVER (PARTITION BY user_pseudo_id, (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') ORDER BY event_timestamp ASC) AS session_campaign
     FROM
         `{project_id}.{dataset_id}.events_*`
     WHERE
         _table_suffix BETWEEN '{start_date}' AND '{end_date}'
-        -- LLM: Apply user-specified filters
-    GROUP BY
+        AND (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') IS NOT NULL
+),
+distinct_sessions AS (
+    SELECT DISTINCT
         user_pseudo_id,
-        session_identifier
+        session_identifier,
+        session_source,
+        session_medium,
+        session_campaign
+    FROM session_event_attribution
 )
 SELECT
     CASE
-        WHEN (traffic_source IS NULL OR traffic_source = '(direct)') 
-             AND (traffic_medium IS NULL OR traffic_medium IN ('(not set)', '(none)')) 
-             THEN 'Direct_Access'
-        WHEN marketing_campaign LIKE '%cross-network%' 
-             THEN 'Cross_Network'
-        WHEN (REGEXP_CONTAINS(traffic_source, 'alibaba|amazon|google shopping|shopify|etsy|ebay|stripe|walmart')
-              OR REGEXP_CONTAINS(marketing_campaign, r'^(.*(([^a-df-z]|^)shop|shopping).*)$'))
-             AND REGEXP_CONTAINS(traffic_medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
-             THEN 'Paid_Shopping'
-        WHEN REGEXP_CONTAINS(traffic_source, 'baidu|bing|duckduckgo|ecosia|google|yahoo|yandex') 
-             AND REGEXP_CONTAINS(traffic_medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
-             THEN 'Paid_Search'
-        WHEN REGEXP_CONTAINS(traffic_source, 'badoo|facebook|fb|instagram|linkedin|pinterest|tiktok|twitter|whatsapp')
-             AND REGEXP_CONTAINS(traffic_medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
-             THEN 'Paid_Social'
-        WHEN REGEXP_CONTAINS(traffic_source, 'dailymotion|disneyplus|netflix|youtube|vimeo|twitch') 
-             AND REGEXP_CONTAINS(traffic_medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
-             THEN 'Paid_Video'
-        WHEN traffic_medium IN ('display', 'banner', 'expandable', 'interstitial', 'cpm') 
-             THEN 'Display_Advertising'
-        WHEN REGEXP_CONTAINS(traffic_medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
-             THEN 'Paid_Other'
-        WHEN REGEXP_CONTAINS(traffic_source, 'alibaba|amazon|google shopping|shopify|etsy|ebay|stripe|walmart') 
-             OR REGEXP_CONTAINS(marketing_campaign, r'^(.*(([^a-df-z]|^)shop|shopping).*)$') 
-             THEN 'Organic_Shopping'
-        WHEN REGEXP_CONTAINS(traffic_source, 'badoo|facebook|fb|instagram|linkedin|pinterest|tiktok|twitter|whatsapp') 
-             OR traffic_medium IN ('social', 'social-network', 'social-media', 'sm', 'social network', 'social media') 
-             THEN 'Organic_Social'
-        WHEN REGEXP_CONTAINS(traffic_source, 'dailymotion|disneyplus|netflix|youtube|vimeo|twitch') 
-             OR REGEXP_CONTAINS(traffic_medium, r'^(.*video.*)$') 
-             THEN 'Organic_Video'
-        WHEN REGEXP_CONTAINS(traffic_source, 'baidu|bing|duckduckgo|ecosia|google|yahoo|yandex') 
-             OR traffic_medium = 'organic' 
-             THEN 'Organic_Search'
-        WHEN traffic_medium IN ('referral', 'app', 'link') 
-             THEN 'Referral_Traffic'
-        WHEN REGEXP_CONTAINS(traffic_source, 'email|e-mail|e_mail|e mail') 
-             OR REGEXP_CONTAINS(traffic_medium, 'email|e-mail|e_mail|e mail') 
-             THEN 'Email_Marketing'
-        WHEN traffic_medium = 'affiliate' 
-             THEN 'Affiliate_Marketing'
-        WHEN traffic_medium = 'audio' 
-             THEN 'Audio_Advertising'
-        WHEN traffic_source = 'sms' OR traffic_medium = 'sms' 
-             THEN 'SMS_Marketing'
-        WHEN traffic_medium LIKE '%push' 
-             OR REGEXP_CONTAINS(traffic_medium, 'mobile|notification') 
-             OR traffic_source = 'firebase' 
-             THEN 'Push_Notifications'
-        ELSE 'Unclassified'
-    END AS session_channel_group,
-    COUNT(DISTINCT CONCAT(user_pseudo_id, CAST(session_identifier AS STRING))) AS session_count
+        WHEN (session_source IS NULL OR session_source = '(direct)') 
+             AND (session_medium IS NULL OR session_medium IN ('(not set)', '(none)')) 
+             THEN 'Direct'
+        WHEN session_campaign LIKE '%cross-network%' 
+             THEN 'Cross-network'
+        WHEN (REGEXP_CONTAINS(session_source, 'alibaba|amazon|google shopping|shopify|etsy|ebay|stripe|walmart|bunnings|jbhifi|harveynorman|kogan|theiconic|catch')
+              OR REGEXP_CONTAINS(session_campaign, r'^(.*(([^a-df-z]|^)shop|shopping).*)$'))
+             AND REGEXP_CONTAINS(session_medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
+             THEN 'Paid Shopping'
+        WHEN REGEXP_CONTAINS(session_source, 'bing|duckduckgo|google|yahoo') 
+             AND REGEXP_CONTAINS(session_medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
+             THEN 'Paid Search'
+        WHEN REGEXP_CONTAINS(session_source, 'badoo|facebook|fb|instagram|linkedin|pinterest|tiktok|twitter|whatsapp')
+             AND REGEXP_CONTAINS(session_medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
+             THEN 'Paid Social'
+        WHEN REGEXP_CONTAINS(session_source, 'dailymotion|disneyplus|netflix|youtube|vimeo|twitch|stan|binge|kayo|9now|7plus|sbsondemand') 
+             AND REGEXP_CONTAINS(session_medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
+             THEN 'Paid Video'
+        WHEN session_medium IN ('display', 'banner', 'expandable', 'interstitial', 'cpm') 
+             THEN 'Display'
+        WHEN REGEXP_CONTAINS(session_medium, r'^(.*cp.*|ppc|retargeting|paid.*)$') 
+             THEN 'Paid Other'
+        WHEN REGEXP_CONTAINS(session_source, 'alibaba|amazon|google shopping|shopify|etsy|ebay|stripe|walmart|bunnings|jbhifi|harveynorman|kogan|theiconic|catch') 
+             OR REGEXP_CONTAINS(session_campaign, r'^(.*(([^a-df-z]|^)shop|shopping).*)$') 
+             THEN 'Organic Shopping'
+        WHEN REGEXP_CONTAINS(session_source, 'badoo|facebook|fb|instagram|linkedin|pinterest|tiktok|twitter|whatsapp') 
+             OR session_medium IN ('social', 'social-network', 'social-media', 'sm', 'social network', 'social media') 
+             THEN 'Organic Social'
+        WHEN REGEXP_CONTAINS(session_source, 'dailymotion|disneyplus|netflix|youtube|vimeo|twitch|stan|binge|kayo|9now|7plus|sbsondemand') 
+             OR REGEXP_CONTAINS(session_medium, r'^(.*video.*)$') 
+             THEN 'Organic Video'
+        WHEN REGEXP_CONTAINS(session_source, 'bing|duckduckgo|google|yahoo') 
+             OR session_medium = 'organic' 
+             THEN 'Organic Search'
+        WHEN session_medium IN ('referral', 'app', 'link') 
+             THEN 'Referral'
+        WHEN REGEXP_CONTAINS(session_source, 'email|e-mail|e_mail|e mail') 
+             OR REGEXP_CONTAINS(session_medium, 'email|e-mail|e_mail|e mail') 
+             THEN 'Email'
+        WHEN session_medium = 'affiliate' 
+             THEN 'Affiliates'
+        WHEN session_medium = 'audio' 
+             THEN 'Audio'
+        WHEN session_source = 'sms' OR session_medium = 'sms' 
+             THEN 'SMS'
+        WHEN session_medium LIKE '%push' 
+             OR REGEXP_CONTAINS(session_medium, 'mobile|notification') 
+             OR session_source = 'firebase' 
+             THEN 'Mobile Push Notifications'
+        ELSE 'Unassigned'
+    END AS `Session Channel`,
+    COUNT(DISTINCT CONCAT(user_pseudo_id, CAST(session_identifier AS STRING))) AS `Sessions`
 FROM
-    session_attribution
+    distinct_sessions
 GROUP BY
-    session_channel_group
+    `Session Channel`
 ORDER BY
-    session_count DESC
+    `Sessions` DESC
 """
     },
 
