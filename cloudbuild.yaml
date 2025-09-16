@@ -1,0 +1,70 @@
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  # Default values that will be overridden by the trigger configuration
+  _REGION: 'us-central1'
+  _REPO_NAME: 'ga4-app-repo'
+  _SERVICE_NAME: 'ga4-talk-app'
+  _SERVICE_ACCOUNT: '' # Provided by the trigger
+  _GA4_BIGQUERY_DATASET: '' # Provided by the trigger
+  _VERTEX_LOCATION: 'us-central1'
+  _MODEL_ID: 'gemini-2.5-pro'
+
+steps:
+  # 1. Build the container image, tagging it with the commit SHA
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Build'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:${SHORT_SHA}'
+      - '.'
+
+  # 2. Push the SHA-tagged image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Push SHA'
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:${SHORT_SHA}'
+
+  # 3. Tag the same image as 'latest' for easy reference
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Tag latest'
+    args:
+      - 'tag'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:${SHORT_SHA}'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:latest'
+
+  # 4. Push the 'latest' tag
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Push latest'
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:latest'
+
+  # 5. Deploy the new revision to Cloud Run using the immutable SHA-tagged image
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'Deploy'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}'
+      - '--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:${SHORT_SHA}'
+      - '--region=${_REGION}'
+      - '--service-account=${_SERVICE_ACCOUNT}'
+      - '--no-allow-unauthenticated'
+      # Set environment variables for the application
+      - '--set-env-vars=GA4_BIGQUERY_DATASET=${_GA4_BIGQUERY_DATASET},VERTEX_LOCATION=${_VERTEX_LOCATION},MODEL_ID=${_MODEL_ID}'
+      - '--port=8080'
+      - '--cpu=1'
+      - '--memory=512Mi'
+      - '--concurrency=80'
+      - '--max-instances=4'
+      - '--min-instances=0'
+
+# List the images that were built to be stored in the build's metadata.
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:${SHORT_SHA}'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:latest'
