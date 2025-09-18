@@ -126,7 +126,7 @@ def default_dates():
 
 
 def build_system_prompt() -> str:
-    today_iso = datetime.utcnow().date().isoformat()
+    today_iso = datetime.now(datetime.timezone.utc).date().isoformat()
     return f"""
 You are a Google Analytics 4 BigQuery expert assistant. Your goal is to answer user questions by selecting the correct GA4 query template and parameters.
 
