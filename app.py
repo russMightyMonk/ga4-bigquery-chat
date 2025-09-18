@@ -155,11 +155,25 @@ Rules:
 st.set_page_config(page_title="Speak with GA4 (Chat Router)", layout="wide")
 st.title("Speak with GA4 (Chat Router)")
 
-with st.expander("About"):
-    st.write("- Ask natural language questions about GA4 BigQuery export.")
-    st.write("- Gemini routes to a GA4 SQL template and extracts parameters.")
-    st.write("- The app runs the query in BigQuery and returns results.")
-    st.write("- Gemini summarizes the results for you.")
+with st.expander("About", expanded=True):
+    st.write("""
+    - Ask natural language questions about your GA4 BigQuery export data.
+    - Gemini routes your question to a specialized SQL template and extracts parameters.
+    - The app securely runs the query in your BigQuery project and returns the data.
+    - Gemini summarizes the results into a concise, easy-to-read answer for you.
+    """)
+    st.markdown("---")
+    st.markdown("**Example Questions to Get Real Value:**")
+    st.info(
+        """
+        - **Acquisition:** "What were my top 5 acquisition channels for new users last month?"
+        - **E-commerce:** "Show me the top 10 best-selling products by revenue this quarter."
+        - **Engagement:** "Compare user engagement rates on mobile vs. desktop for the last 30 days."
+        - **Campaigns:** "Which marketing campaigns drove the most revenue in May?"
+        - **User Behavior:** "What are the most common pages users exit from?"
+        - **Geography:** "Analyze user performance and engagement in the United States vs. Canada."
+        """
+    )
 
 with st.sidebar:
     st.header("Connection")
