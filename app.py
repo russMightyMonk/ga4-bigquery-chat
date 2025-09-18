@@ -198,7 +198,7 @@ for m in st.session_state.messages:
 # ------------------------------------------------------------------------------
 # Main
 # ------------------------------------------------------------------------------
-placeholder = "Ask e.g., 'Active vs inactive users last 7 days', 'Top 10 traffic sources this month', 'LTV by currency last quarter'."
+placeholder = "Try: 'Top 5 channels for new users last month', 'Best‑selling products by revenue this quarter', 'Engagement rate: mobile vs desktop (last 30 days)', 'Top campaigns by revenue in May', 'Most common exit pages', 'US vs Canada: users and engagement'."
 if user_prompt := st.chat_input(placeholder):
     st.session_state.messages.append({"role": "user", "content": user_prompt})
     with st.chat_message("user"):
