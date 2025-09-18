@@ -122,7 +122,18 @@ The application provides a conversational interface for querying your GA4 data.
 
 ## Development and Customization
 
-Your CI/CD pipeline is now active. To customize the application or add new analytics capabilities, simply edit the code and push your changes to the `main` branch.
+
+### BigQuery Query Limits
+The app has a 30GB per-query limit for cost protection. To modify this:
+
+1. Edit `app.py`, find the `execute_bq_query()` function
+2. Change `maximum_bytes_billed=30_000_000_000` to your desired bytes
+3. Push changes to trigger redeployment
+
+**Examples:**
+- 10GB: `10_000_000_000`
+- 50GB: `50_000_000_000`
+- 100GB: `100_000_000_000`
 
 ### Adding New Queries
 
@@ -155,7 +166,7 @@ GROUP BY
 ORDER BY
     user_count DESC
 """
-},
+}, ...
 ```
 
 After adding your new template, commit and push the change to `main`. Cloud Build will automatically deploy the updated application.

@@ -104,7 +104,7 @@ def get_template_descriptions() -> str:
 
 
 def execute_bq_query(sql: str):
-    job_config = bigquery.QueryJobConfig(maximum_bytes_billed=1_000_000_000)  # 1 GB cap
+    job_config = bigquery.QueryJobConfig(maximum_bytes_billed=30_000_000_000)  # 30 GB cap - Change here if you need more data to be processed
     query_job = bq_client.query(sql, job_config=job_config)
     rows = query_job.result()
     return [dict(row.items()) for row in rows]
