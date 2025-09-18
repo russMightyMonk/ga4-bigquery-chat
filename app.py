@@ -111,10 +111,18 @@ def execute_bq_query(sql: str):
 
 
 def default_dates():
-    today = datetime.utcnow().date()
-    end = today - timedelta(days=1)
-    start = end - timedelta(days=6)  # last 7 days inclusive
-    return start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
+    """
+    Returns default date range for GA4 queries.
+    GA4 BigQuery exports have ~1 day lag, so 'yesterday' is the latest available data.
+    Returns 7 days of data ending yesterday.
+    """
+    from datetime import timezone
+    
+    today = datetime.now(timezone.utc).date()
+    end_date = today - timedelta(days=1)      # Yesterday (latest GA4 data)
+    start_date = today - timedelta(days=8)    # 8 days ago (gives us 7 days inclusive)
+    
+    return start_date.strftime("%Y%m%d"), end_date.strftime("%Y%m%d")
 
 
 def build_system_prompt() -> str:
