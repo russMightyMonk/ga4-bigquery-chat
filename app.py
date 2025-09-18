@@ -135,8 +135,7 @@ Plan:
 2) Choose the best template from the list.
 3) Extract parameters:
    - Dates in YYYYMMDD (handle phrases like "yesterday", "last 7 days", "this month").
-   - If missing, default to the last 7 days (inclusive).
-   - top_n defaults to 10 if not provided.
+   - If missing, default to the last 8 days (inclusive).
 4) Call execute_template_query with template_name and parameters.
 5) After receiving results, produce a concise answer grounded ONLY in the returned data.
 
@@ -149,7 +148,6 @@ Rules:
 - GA4 dataset: {GA4_DATASET}
 - Use only provided data when summarizing (no fabrication).
 """.strip()
-
 
 # ------------------------------------------------------------------------------
 # UI
