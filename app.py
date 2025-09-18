@@ -37,7 +37,7 @@ genai_client = genai.Client(vertexai=True, location=VERTEX_LOCATION, project=PRO
 
 
 # ------------------------------------------------------------------------------
-# Tools (Function Calling) — minimal change to original schema, GA4-aware params
+# Tools (Function Calling) — GA4-aware params
 # ------------------------------------------------------------------------------
 execute_template_query_func = FunctionDeclaration(
     name="execute_template_query",
@@ -54,7 +54,8 @@ execute_template_query_func = FunctionDeclaration(
             "parameters": {
                 "type": "object",
                 "description": (
-                    "Template parameters. Common: start_date/end_date (YYYYMMDD), top_n."
+                    "Template parameters. Common: start_date/end_date (YYYYMMDD), top_n, "
+                    "and other specific filters like event_name, property_key, or country_name."
                 ),
                 "properties": {
                     "start_date": {
@@ -65,17 +66,29 @@ execute_template_query_func = FunctionDeclaration(
                         "type": "string",
                         "description": "YYYYMMDD. Defaults to yesterday.",
                     },
-                    "top_n": {
-                        "type": "number",
-                        "description": "Top N rows to return. Defaults to 10.",
+                    "property_key": {
+                        "type": "string",
+                        "description": "The key of the user property to analyze (e.g., 'user_tier'). Used by templates like 'extract_specific_user_property'.",
                     },
-                    # extra optional filters can be added by templates as needed
+                    "event_name": {
+                        "type": "string",
+                        "description": "The name of the event to analyze (e.g., 'purchase', 'page_view'). Used by templates like 'calculate_events_per_user' or 'analyze_specific_event_details'.",
+                    },
+                    "country_name": {
+                        "type": "string",
+                        "description": "The full name of a country for analysis (e.g., 'United States'). Used by 'analyze_specific_country'.",
+                    },
+                    "campaign_name": {
+                        "type": "string",
+                        "description": "The name of a marketing campaign for analysis. Used by 'analyze_specific_campaign'.",
+                    },
                 },
             },
         },
         "required": ["template_name", "parameters"],
     },
 )
+
 query_tool = Tool(function_declarations=[execute_template_query_func])
 
 
