@@ -176,9 +176,13 @@ with st.expander("About", expanded=True):
     )
 
 with st.sidebar:
-    st.header("Connection")
-    st.text_input("Project ID", value=PROJECT_ID, disabled=True)
-    st.text_input("GA4 Dataset", value=GA4_DATASET, disabled=True)
+    st.header("⚙️ Configuration")
+    st.markdown("""
+    This app is connected to the following BigQuery resources. 
+    These values are set via environment variables during deployment.
+    """)
+    st.success(f"**Project ID:** `{PROJECT_ID}`")
+    st.success(f"**GA4 Dataset:** `{GA4_DATASET}`")
 
 # Chat history
 if "messages" not in st.session_state:
