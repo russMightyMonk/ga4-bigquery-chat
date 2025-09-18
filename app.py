@@ -29,14 +29,10 @@ if not GA4_DATASET:
 # ------------------------------------------------------------------------------
 # Clients
 # ------------------------------------------------------------------------------
-try:
-    bq_client = bigquery.Client()
-    PROJECT_ID = bq_client.project
-except Exception as e:
-    st.error(f"Failed to init BigQuery client. Check permissions. Error: {e}")
-    st.stop()
-
-# Vertex AI GenAI client (Vertex-native, like original)
+# BigQuery client (auto picks up credentials from env)
+bq_client = bigquery.Client()
+PROJECT_ID = bq_client.project
+# GenAI client
 genai_client = genai.Client(vertexai=True, location=VERTEX_LOCATION, project=PROJECT_ID)
 
 
