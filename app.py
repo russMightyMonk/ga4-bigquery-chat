@@ -208,7 +208,7 @@ if user_prompt := st.chat_input(placeholder):
         try:
             with st.spinner("Thinking..."):
                 system_prompt = build_system_prompt()
-                full_prompt = f"{system_prompt}\n\nUser question: {user_prompt}"
+                full_prompt = f"{system_prompt}\nUser question: {user_prompt}"
 
                 chat = genai_client.chats.create(
                     model=MODEL_ID,
