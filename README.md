@@ -127,6 +127,7 @@ To update the placeholder examples users see in the chat input, edit the `placeh
 
 ```python
 placeholder = "Try: 'Top traffic sources last month', 'Mobile vs desktop users', 'Best campaigns by revenue'"
+```
 
 ### BigQuery Query Limits
 The app has a 30GB per-query limit for cost protection. To modify this:
