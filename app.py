@@ -238,7 +238,6 @@ if user_prompt := st.chat_input(placeholder):
                         "dataset_id": GA4_DATASET,
                         "start_date": (params.get("start_date") or start_def),
                         "end_date": (params.get("end_date") or end_def),
-                        "top_n": params.get("top_n", 10),
                     }
 
                     # Render SQL
