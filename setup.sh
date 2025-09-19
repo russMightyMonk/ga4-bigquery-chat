@@ -23,10 +23,6 @@ function print_prompt {
 }
 
 # --- Check for required tools ---
-if ! command -v gcloud &> /dev/null; then
-    echo "gcloud command not found. Please install the Google Cloud SDK and ensure it's in your PATH."
-    exit 1
-fi
 if ! command -v docker &> /dev/null; then
     echo "docker command not found. Please install Docker and ensure it is running."
     exit 1
