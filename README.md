@@ -176,3 +176,26 @@ ORDER BY
 ```
 
 After adding your new template, commit and push the change to `main`. Cloud Build will automatically deploy the updated application.
+
+### Important Notes & Troubleshooting
+
+**⚠️ Setup Variability:** While this setup script has been tested and works in standard GCP environments, your experience may vary due to:
+
+- **GCP Platform Changes**: Google Cloud services and APIs evolve over time
+- **Organization Policies**: Your company may have specific IAM policies or restrictions
+- **Project Configuration**: Existing project settings might conflict with the setup
+- **Regional Differences**: Some GCP services may not be available in all regions
+
+**🛠️ If the automated setup fails:**
+
+1. **Try the Google Cloud Console UI**: Most script operations can be performed manually through the GCP web interface
+2. **Consult an LLM**: Copy any error messages to ChatGPT, Claude, or Gemini for troubleshooting guidance
+3. **Check GCP Documentation**: Google's official documentation is always the most up-to-date resource
+4. **Open a GitHub Issue**: As a last resort, create an issue in this repository with:
+   - Your error message
+   - The step where it failed  
+   - Your GCP project setup details (without sensitive information)
+
+**💡 Pro Tip**: The script is designed to be idempotent - you can safely re-run it after fixing issues, and it will skip already-created resources.
+
+---
