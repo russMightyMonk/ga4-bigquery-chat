@@ -113,6 +113,11 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" \
 
 gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:$APP_SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/bigquery.user" \
+    --condition=None
+
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:$APP_SERVICE_ACCOUNT_EMAIL" \
     --role="roles/aiplatform.user" \
     --condition=None
 
@@ -129,6 +134,16 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" \
 gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:$BUILD_SERVICE_ACCOUNT_EMAIL" \
     --role="roles/artifactregistry.writer" \
+    --condition=None
+
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:$BUILD_SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/developerconnect.readTokenAccessor" \
+    --condition=None
+
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:$BUILD_SERVICE_ACCOUNT_EMAIL" \
+    --role="roles/logging.logWriter" \
     --condition=None
 
 gcloud iam service-accounts add-iam-policy-binding "$APP_SERVICE_ACCOUNT_EMAIL" \
