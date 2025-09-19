@@ -158,6 +158,36 @@ gcloud artifacts repositories create "$ARTIFACT_REPO_NAME" \
    --location="$REGION" \
    --description="Docker repository for GA4 App" || print_info "Artifact Registry repository already exists."
 
+print_info "Setting up cleanup policy for Artifact Registry..."
+cat << EOF > cleanup-policy.json
+[
+  {
+    "name": "keep-latest-tag",
+    "action": { "type": "KEEP" },
+    "condition": {
+      "tagState": "TAGGED",
+      "tagPrefixes": ["latest"],
+      "packageNamePrefixes": ["${SERVICE_NAME}"]
+    }
+  },
+  {
+    "name": "delete-all-others",
+    "action": { "type": "DELETE" },
+    "condition": {
+      "tagState": "ANY",
+      "packageNamePrefixes": ["${SERVICE_NAME}"]
+    }
+  }
+]
+EOF
+
+gcloud artifacts repositories set-cleanup-policies "$ARTIFACT_REPO_NAME" \
+  --location="$REGION" \
+  --policy=cleanup-policy.json
+
+# Clean up the temporary policy file
+rm cleanup-policy.json
+
 print_info "Configuring Docker to authenticate with Artifact Registry..."
 gcloud auth configure-docker "${REGION}-docker.pkg.dev"
 
