@@ -147,6 +147,10 @@ print_info "Configuring Docker to authenticate with Artifact Registry..."
 gcloud auth configure-docker "${REGION}-docker.pkg.dev"
 
 # --- 6. INITIAL DEPLOYMENT ---
+print_info "Cloning the repository..."
+git clone "https://${GITHUB_USER}:${GITHUB_PAT}@github.com/${GITHUB_USER}/${GITHUB_REPO}.git"
+cd "$GITHUB_REPO"
+
 print_info "Performing initial build and push of the Docker image..."
 IMAGE_TAG="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO_NAME}/${SERVICE_NAME}:initial"
 docker build -t "$IMAGE_TAG" .
@@ -160,6 +164,9 @@ gcloud run deploy "$SERVICE_NAME" \
     --port="8080" \
     --set-env-vars="GA4_BIGQUERY_DATASET=${GA4_DATASET_ID}" \
     --no-allow-unauthenticated
+
+# Return to home directory 
+cd ~
 
 # --- 7. CONFIGURE IAP ---
 print_info "Securing Cloud Run service with Identity-Aware Proxy (IAP)..."
