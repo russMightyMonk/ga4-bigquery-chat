@@ -241,14 +241,10 @@ if user_prompt := st.chat_input(placeholder):
                     }
 
                     # Add template-specific parameters if provided
-                    if "event_name" in params:
-                        final_params["event_name"] = params["event_name"]
-                    if "country_name" in params:
-                        final_params["country_name"] = params["country_name"]
-                    if "property_key" in params:
-                        final_params["property_key"] = params["property_key"]
-                    if "campaign_name" in params:
-                        final_params["campaign_name"] = params["campaign_name"]
+                    template_specific = ["event_name", "country_name", "property_key", "campaign_name"]
+                    for param in template_specific:
+                        if param in params:
+                            final_params[param] = params[param]
 
                     # Render SQL
                     try:
