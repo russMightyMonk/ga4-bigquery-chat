@@ -103,13 +103,18 @@ gcloud iam service-accounts create "$APP_SERVICE_ACCOUNT_NAME" \
 print_info "Granting BigQuery and Vertex AI roles to the App Service Account..."
 gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:$APP_SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/bigquery.jobUser"
+    --role="roles/bigquery.jobUser" \
+    --condition=None
+
 gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:$APP_SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/bigquery.dataViewer"
+    --role="roles/bigquery.dataViewer" \
+    --condition=None
+
 gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:$APP_SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/aiplatform.user"
+    --role="roles/aiplatform.user" \
+    --condition=None
 
 print_info "Creating Service Account for Cloud Build..."
 gcloud iam service-accounts create "$BUILD_SERVICE_ACCOUNT_NAME" \
@@ -118,13 +123,18 @@ gcloud iam service-accounts create "$BUILD_SERVICE_ACCOUNT_NAME" \
 print_info "Granting Cloud Build SA permissions to manage Cloud Run and Artifact Registry..."
 gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:$BUILD_SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/run.admin"
+    --role="roles/run.admin" \
+    --condition=None
+
 gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:$BUILD_SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/artifactregistry.writer"
+    --role="roles/artifactregistry.writer" \
+    --condition=None
+
 gcloud iam service-accounts add-iam-policy-binding "$APP_SERVICE_ACCOUNT_EMAIL" \
     --member="serviceAccount:$BUILD_SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/iam.serviceAccountUser"
+    --role="roles/iam.serviceAccountUser" \
+    --condition=None
 
 # --- 5. CONFIGURE ARTIFACT REGISTRY AND DOCKER ---
 print_info "Creating Artifact Registry repository '$ARTIFACT_REPO_NAME'..."
