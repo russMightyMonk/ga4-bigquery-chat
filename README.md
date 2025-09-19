@@ -101,7 +101,8 @@ This is the main setup step. You will use the Google Cloud Shell to clone your r
    *   The **email address** you want to grant access to (your own Google account).
    *   Your **GitHub Username**.
    *   The **name of your forked repository**.
-   *   Your **GitHub Personal Access Token (PAT)**.
+   *   Your **GitHub Personal Access Token (PAT)**
+   *   Your **GA4 BigQuery Dataset ID** (e.g., `analytics_123456789`).
 
 The script will take several minutes to complete as it enables APIs, creates service accounts, builds the application, deploys it to Cloud Run, and configures the Cloud Build trigger.
 
@@ -121,7 +122,11 @@ The application provides a conversational interface for querying your GA4 data.
 6.  **Display**: The final answer is displayed in the chat. For transparency, an expander shows the chosen template, parameters, and the exact SQL query that was run.
 
 ## Development and Customization
+### Customizing Example Prompts
+To update the placeholder examples users see in the chat input, edit the `placeholder` variable in `app.py`:
 
+```python
+placeholder = "Try: 'Top traffic sources last month', 'Mobile vs desktop users', 'Best campaigns by revenue'"
 
 ### BigQuery Query Limits
 The app has a 30GB per-query limit for cost protection. To modify this:
