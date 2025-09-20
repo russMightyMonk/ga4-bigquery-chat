@@ -79,7 +79,23 @@ This is a one-time manual step per project. It configures the login screen that 
 
 That’s it for the consent screen setup.
 
-### Step 3: Run the Automated Setup from Cloud Shell
+### Step 3: Connect GitHub to Google Cloud Build
+
+This one-time setup authorizes your Google Cloud project to access your GitHub repository, which is required for the automated CI/CD pipeline.
+
+**IMPORTANT:** Before accessing a link below, you might be redirected to enable the Cloud Build API. It is fine to enable that API, and then click on the link again.
+
+1.  Navigate to the **[Cloud Build Repositories page](https://console.cloud.google.com/cloud-build/repositories)** in the GCP Console.
+2.  Make sure you are in the correct GCP project, then click **Connect repository**.
+3.  Select **GitHub (Cloud Build GitHub App)** as the source and click **Continue**.
+4.  Authenticate with your GitHub account. You will be redirected to GitHub to **Authorize Google Cloud Build**.
+5.  On the next screen, you may be prompted to **Install Google Cloud Build** if it's not already configured for your account. Click the install button and choose which repositories to grant access to (you can select just your forked repo).
+6.  You will be redirected back to the GCP console. Select your **GitHub Account** and the forked **Repository** from the dropdown menus.
+7.  Check the box to agree to the terms and click **Connect**.
+
+**IMPORTANT:** The next page will prompt you to "Create a trigger". **Do not do this.** The setup script will create the trigger for you. You have successfully created the connection and can proceed to the next step.
+
+### Step 4: Run the Automated Setup from Cloud Shell
 
 This is the main setup step. You will use the Google Cloud Shell to clone your repository and run a script that provisions all the necessary cloud infrastructure and sets up the CI/CD pipeline.
 
