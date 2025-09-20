@@ -3,7 +3,7 @@
 
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import streamlit as st
 from google import genai
@@ -116,8 +116,6 @@ def default_dates():
     GA4 BigQuery exports have ~1 day lag, so 'yesterday' is the latest available data.
     Returns 7 days of data ending yesterday.
     """
-    from datetime import timezone
-    
     today = datetime.now(timezone.utc).date()
     end_date = today - timedelta(days=1)      # Yesterday (latest GA4 data)
     start_date = today - timedelta(days=8)    # 8 days ago (gives us 7 days inclusive)
@@ -126,7 +124,7 @@ def default_dates():
 
 
 def build_system_prompt() -> str:
-    today_iso = datetime.now(datetime.timezone.utc).date().isoformat()
+    today_iso = datetime.now(timezone.utc).date().isoformat()
     return f"""
 You are a Google Analytics 4 BigQuery expert assistant. Your goal is to answer user questions by selecting the correct GA4 query template and parameters.
 
