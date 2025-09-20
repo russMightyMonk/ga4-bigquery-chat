@@ -41,13 +41,22 @@ Before you begin, ensure you have the following:
 
 ### Step 1: Fork and Clone the Repository
 
-1.  **Fork** this repository to your own GitHub account.
-2.  **(Recommended)** For security, make your forked repository private. In your forked repo, go to `Settings` -> `Danger Zone` -> `Change repository visibility` -> `Make private`.
-3.  **Clone your forked repository** to your local machine:
-    ```bash
-    git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
-    cd YOUR_REPO_NAME
-    ```
+1. **Fork** this repository to your own GitHub account by clicking the "Fork" button at the top right of the page.
+
+2. **(Recommended)** For security, make your forked repository private. This is a multi-step process:
+
+   *   On your forked repository's GitHub page, navigate to `Settings`.
+   *   Scroll to the bottom to the **"Danger Zone"**.
+   *   Find the section **"**Leave fork network**"**. Click the **"Leave fork network**" button. Read the warnings and confirm the action by typing your repository name. This permanently separates your copy from the original.
+   *   After the repository has been detached, find the **"Change repository visibility"** section in the "Danger Zone" and click the **"Change visibility"** button.
+   *   Select **"Make private"** and follow the confirmation prompts.
+
+3. **Clone your now-private repository** to your local machine:
+
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+   cd YOUR_REPO_NAME
+   ```
 
 ### Step 2: Configure GCP OAuth Consent Screen
 
