@@ -215,7 +215,7 @@ cd ~
 
 # --- 7. CONFIGURE IAP ---
 print_info "Securing Cloud Run service with Identity-Aware Proxy (IAP)..."
-gcloud run services update "$SERVICE_NAME" --region="$REGION" --iap
+gcloud beta run services update "$SERVICE_NAME" --region="$REGION" --iap
 
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
 IAP_SA_EMAIL="service-${PROJECT_NUMBER}@gcp-sa-iap.iam.gserviceaccount.com"
