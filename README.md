@@ -60,13 +60,24 @@ Before you begin, ensure you have the following:
 
 ### Step 2: Configure GCP OAuth Consent Screen
 
-This is a **one-time manual step** per project. It configures the login screen that IAP presents to users.
+This is a one-time manual step per project. It configures the login screen that IAP presents to users.
 
-1.  Go to the [OAuth Consent Screen page](https://console.cloud.google.com/apis/credentials/consent) in the GCP Console.
-2.  Choose **Internal** (if all users are in your Google organization) or **External** (for any Google account).
-3.  Fill in the required fields (App name, User support email). Click **SAVE AND CONTINUE**.
-4.  You can skip adding scopes and test users.
-5.  On the summary page, click **BACK TO DASHBOARD**. If you chose "External", you may need to click **PUBLISH APP**.
+1. Open the [OAuth Consent Screen page](https://console.cloud.google.com/apis/credentials/consent)
+2. Click **Get Started**.
+3. Provide the basic app details:
+   - App name: ga4-bigquery-chat
+   - User support email: your own email
+4. Choose User Type:
+   - External (for any Google account) or
+   - Internal (only users in your Google Workspace)
+   - Click Create or Continue.
+5. Developer contact information:
+   - Enter your email address under Contact information.
+6. Check the box: I agree to the Google API Services: User Data Policy.
+7. Click Create (or Save and Continue, depending on UI).
+8. If you selected External: Click Publish App to move from Testing to In production, then confirm.
+
+That’s it for the consent screen setup.
 
 ### Step 3: Run the Automated Setup from Cloud Shell
 
