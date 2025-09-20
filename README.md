@@ -132,6 +132,8 @@ This is the main setup step. You will use the Google Cloud Shell to clone your r
 5. **Follow the Prompts**
    The script will ask for the following information to configure your resources:
 
+    > **Important:** Please make sure that you have the values below entered exactly as they appear, without any spaces, as this might cause the script to fail. Furthermore, I recommend creating a .txt file with these values to input as required.
+
    *   Your GCP **Project ID**.
    *   A **Region** for your resources (e.g., `us-central1`).
    *   The **email address** you want to grant access to (your own Google account).
