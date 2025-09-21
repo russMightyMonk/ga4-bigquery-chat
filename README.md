@@ -144,6 +144,8 @@ This is the main setup step. You will use the Google Cloud Shell to clone your r
 
 The script will take several minutes to complete as it enables APIs, creates service accounts, builds the application, deploys it to Cloud Run, and configures the Cloud Build trigger.
 
+**Important**: Please note that during the installation process, you will be asked whether you want to use IAP (Identity-Aware Proxy). You can think of it as a shield that protects your application from unwanted visitors. It is a very good solution; however, the problem is that it can only be enabled for accounts that are part of an organization in Google Cloud.
+
 Once the script completes successfully, your CI/CD pipeline is live. **You can now close Cloud Shell.** All future development can be done from your local machine; simply push code changes to your GitHub repository's `main` branch, and Cloud Build will automatically deploy them.
 
 ---
