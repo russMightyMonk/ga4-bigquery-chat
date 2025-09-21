@@ -28,6 +28,11 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
+if ! command -v sha256sum &> /dev/null; then
+    echo "sha256sum command not found. Please install coreutils."
+    exit 1
+fi
+
 # --- 1. GATHER USER INPUT ---
 print_info "Starting the automated setup for the GA4 Streamlit App."
 print_info "This script will provision all necessary GCP resources and set up a CI/CD pipeline."
@@ -52,11 +57,30 @@ echo "" # Newline after secret input
 print_prompt "Enter the BigQuery Dataset ID for your GA4 events (e.g., analytics_123456789): "
 read GA4_DATASET_ID
 
-print_prompt "Enable Identity-Aware Proxy (IAP) for secure access? [y/N] "
+print_prompt "Enable Identity-Aware Proxy (IAP) for secure access? (Recommended) [Y/n] "
 read ENABLE_IAP
 
-USER_EMAIL="" # Initialize to empty
-if [[ "$ENABLE_IAP" =~ ^[yY](es)?$ ]]; then
+USER_EMAIL=""
+SIMPLE_AUTH_USERNAME=""
+SIMPLE_AUTH_PASSWORD=""
+AUTH_FLAG="--no-allow-unauthenticated"
+ENV_VARS="GA4_BIGQUERY_DATASET=${GA4_DATASET_ID}"
+
+if [[ "$ENABLE_IAP" =~ ^[nN]$ ]]; then
+    AUTH_FLAG="--allow-unauthenticated"
+    print_prompt "Enable simple password protection instead? [Y/n] "
+    read ENABLE_SIMPLE_AUTH
+    if [[ ! "$ENABLE_SIMPLE_AUTH" =~ ^[nN]$ ]]; then
+        print_prompt "Enter a username for simple auth: "
+        read SIMPLE_AUTH_USERNAME
+        print_prompt "Enter a password for simple auth: "
+        read -s SIMPLE_AUTH_PASSWORD
+        echo ""
+        # Hash the password for secure storage
+        SIMPLE_AUTH_PASSWORD_HASH=$(printf "%s" "$SIMPLE_AUTH_PASSWORD" | sha256sum | head -c 64)
+        ENV_VARS+=",SIMPLE_AUTH_USERNAME=${SIMPLE_AUTH_USERNAME},SIMPLE_AUTH_PASSWORD_HASH=${SIMPLE_AUTH_PASSWORD_HASH}"
+    fi
+else
     print_prompt "Enter the email address to grant IAP access (your Google account): "
     read USER_EMAIL
 fi
@@ -69,11 +93,14 @@ echo "Region:               $REGION"
 echo "GitHub User:          $GITHUB_USER"
 echo "GitHub Repo:          $GITHUB_REPO"
 echo "GA4 Dataset ID:       $GA4_DATASET_ID"
-if [[ "$ENABLE_IAP" =~ ^[yY](es)?$ ]]; then
-    echo "Enable IAP:           Yes"
+if [[ ! "$ENABLE_IAP" =~ ^[nN]$ ]]; then
+    echo "Authentication:       IAP (Recommended)"
     echo "User Email (IAP):     $USER_EMAIL"
+elif [[ -n "$SIMPLE_AUTH_USERNAME" ]]; then
+    echo "Authentication:       Simple Password"
+    echo "Simple Auth User:     $SIMPLE_AUTH_USERNAME"
 else
-    echo "Enable IAP:           No"
+    echo "Authentication:       None (Public)"
 fi
 echo "------------------------------------------------------------------"
 print_prompt "Is this correct? [y/N] "
@@ -191,7 +218,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --service-account="$APP_SERVICE_ACCOUNT_EMAIL" \
     --region="$REGION" \
     --port="8080" \
-    --set-env-vars="GA4_BIGQUERY_DATASET=${GA4_DATASET_ID}" \
+    --set-env-vars="$ENV_VARS" \
     $AUTH_FLAG
 
 # Return to the previous directory and clean up
@@ -225,6 +252,11 @@ gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$G
 
 
 # --- 9. CREATE CLOUD BUILD TRIGGER ---
+SUBSTITUTIONS="_REGION=${REGION},_REPO_NAME=${ARTIFACT_REPO_NAME},_SERVICE_NAME=${SERVICE_NAME},_SERVICE_ACCOUNT=${APP_SERVICE_ACCOUNT_EMAIL},_GA4_BIGQUERY_DATASET=${GA4_DATASET_ID},_AUTH_FLAG=${AUTH_FLAG}"
+if [[ -n "$SIMPLE_AUTH_USERNAME" ]]; then
+    SUBSTITUTIONS+=",_SIMPLE_AUTH_USERNAME=${SIMPLE_AUTH_USERNAME},_SIMPLE_AUTH_PASSWORD_HASH=${SIMPLE_AUTH_PASSWORD_HASH}"
+fi
+
 print_info "Creating Cloud Build trigger..."
 gcloud beta builds triggers create github \
     --name="deploy-${SERVICE_NAME}-main" \
@@ -235,8 +267,8 @@ gcloud beta builds triggers create github \
     --branch-pattern="^main$" \
     --build-config="cloudbuild.yaml" \
     --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SERVICE_ACCOUNT_EMAIL}" \
-    --substitutions="_REGION=${REGION},_REPO_NAME=${ARTIFACT_REPO_NAME},_SERVICE_NAME=${SERVICE_NAME},_SERVICE_ACCOUNT=${APP_SERVICE_ACCOUNT_EMAIL},_GA4_BIGQUERY_DATASET=${GA4_DATASET_ID},_AUTH_FLAG=${AUTH_FLAG}"
-
+    --substitutions="$SUBSTITUTIONS"
+    
 # --- 10. FINAL OUTPUT ---
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --format='value(status.url)')
 
