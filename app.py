@@ -13,7 +13,7 @@ from google.genai.types import FunctionDeclaration, GenerateContentConfig, Part,
 
 from query_template_library import QUERY_TEMPLATE_LIBRARY
 
-st.set_page_config(page_title="Speak with GA4", layout="wide")
+st.set_page_config(page_title="Speak with GA4 v1", layout="wide")
 
 # ------------------------------------------------------------------------------
 # Config (env-driven; safe defaults)
@@ -185,7 +185,7 @@ if is_authenticated:
         st.error(f"Failed to initialize Google Cloud clients: {e}")
         st.stop()
 
-    st.title("Speak with GA4")
+    st.title("Speak with GA4 v1")
 
     with st.expander("About", expanded=False):
         st.write("""
