@@ -39,9 +39,6 @@ read PROJECT_ID
 print_prompt "Enter the GCP Region for your resources (e.g., us-central1): "
 read REGION
 
-print_prompt "Enter the email address to grant IAP access (your Google account): "
-read USER_EMAIL
-
 print_prompt "Enter your GitHub Username: "
 read GITHUB_USER
 
@@ -55,14 +52,29 @@ echo "" # Newline after secret input
 print_prompt "Enter the BigQuery Dataset ID for your GA4 events (e.g., analytics_123456789): "
 read GA4_DATASET_ID
 
+print_prompt "Enable Identity-Aware Proxy (IAP) for secure access? [y/N] "
+read ENABLE_IAP
+
+USER_EMAIL="" # Initialize to empty
+if [[ "$ENABLE_IAP" =~ ^[yY](es)?$ ]]; then
+    print_prompt "Enter the email address to grant IAP access (your Google account): "
+    read USER_EMAIL
+fi
+
+
 echo "------------------------------------------------------------------"
 print_info "Configuration Summary:"
 echo "Project ID:           $PROJECT_ID"
 echo "Region:               $REGION"
-echo "User Email (IAP):     $USER_EMAIL"
 echo "GitHub User:          $GITHUB_USER"
 echo "GitHub Repo:          $GITHUB_REPO"
 echo "GA4 Dataset ID:       $GA4_DATASET_ID"
+if [[ "$ENABLE_IAP" =~ ^[yY](es)?$ ]]; then
+    echo "Enable IAP:           Yes"
+    echo "User Email (IAP):     $USER_EMAIL"
+else
+    echo "Enable IAP:           No"
+fi
 echo "------------------------------------------------------------------"
 print_prompt "Is this correct? [y/N] "
 read confirm
@@ -81,7 +93,6 @@ APP_SERVICE_ACCOUNT_NAME="ga4-app-runner-sa"
 APP_SERVICE_ACCOUNT_EMAIL="${APP_SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 BUILD_SERVICE_ACCOUNT_NAME="ga4-app-builder-sa"
 BUILD_SERVICE_ACCOUNT_EMAIL="${BUILD_SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
-GITHUB_SECRET_NAME="github-pat-ga4-app"
 
 # --- 3. ENABLE APIS ---
 print_info "Enabling necessary GCP APIs..."
@@ -92,8 +103,7 @@ gcloud services enable \
     artifactregistry.googleapis.com \
     aiplatform.googleapis.com \
     bigquery.googleapis.com \
-    cloudbuild.googleapis.com \
-    secretmanager.googleapis.com
+    cloudbuild.googleapis.com
 
 # --- 4. CREATE SERVICE ACCOUNTS AND PERMISSIONS ---
 print_info "Creating Service Account for the application..."
@@ -101,55 +111,20 @@ gcloud iam service-accounts create "$APP_SERVICE_ACCOUNT_NAME" \
   --display-name="GA4 Streamlit App Runner SA" || print_info "App Service Account already exists."
 
 print_info "Granting BigQuery and Vertex AI roles to the App Service Account..."
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:$APP_SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/bigquery.jobUser" \
-    --condition=None
-
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:$APP_SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/bigquery.dataViewer" \
-    --condition=None
-
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:$APP_SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/bigquery.user" \
-    --condition=None
-
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:$APP_SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/aiplatform.user" \
-    --condition=None
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$APP_SERVICE_ACCOUNT_EMAIL" --role="roles/bigquery.jobUser" --condition=None
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$APP_SERVICE_ACCOUNT_EMAIL" --role="roles/bigquery.dataViewer" --condition=None
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$APP_SERVICE_ACCOUNT_EMAIL" --role="roles/bigquery.user" --condition=None
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$APP_SERVICE_ACCOUNT_EMAIL" --role="roles/aiplatform.user" --condition=None
 
 print_info "Creating Service Account for Cloud Build..."
 gcloud iam service-accounts create "$BUILD_SERVICE_ACCOUNT_NAME" \
   --display-name="GA4 App Cloud Build SA" || print_info "Build Service Account already exists."
 
 print_info "Granting Cloud Build SA permissions to manage Cloud Run and Artifact Registry..."
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:$BUILD_SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/run.admin" \
-    --condition=None
-
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:$BUILD_SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/artifactregistry.writer" \
-    --condition=None
-
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:$BUILD_SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/developerconnect.readTokenAccessor" \
-    --condition=None
-
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member="serviceAccount:$BUILD_SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/logging.logWriter" \
-    --condition=None
-
-gcloud iam service-accounts add-iam-policy-binding "$APP_SERVICE_ACCOUNT_EMAIL" \
-    --member="serviceAccount:$BUILD_SERVICE_ACCOUNT_EMAIL" \
-    --role="roles/iam.serviceAccountUser" \
-    --condition=None
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$BUILD_SERVICE_ACCOUNT_EMAIL" --role="roles/run.admin" --condition=None
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$BUILD_SERVICE_ACCOUNT_EMAIL" --role="roles/artifactregistry.writer" --condition=None
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$BUILD_SERVICE_ACCOUNT_EMAIL" --role="roles/logging.logWriter" --condition=None
+gcloud iam service-accounts add-iam-policy-binding "$APP_SERVICE_ACCOUNT_EMAIL" --member="serviceAccount:$BUILD_SERVICE_ACCOUNT_EMAIL" --role="roles/iam.serviceAccountUser" --condition=None
 
 # --- 5. CONFIGURE ARTIFACT REGISTRY AND DOCKER ---
 print_info "Creating Artifact Registry repository '$ARTIFACT_REPO_NAME'..."
@@ -192,9 +167,18 @@ print_info "Configuring Docker to authenticate with Artifact Registry..."
 gcloud auth configure-docker "${REGION}-docker.pkg.dev"
 
 # --- 6. INITIAL DEPLOYMENT ---
-print_info "Cloning the repository..."
+print_info "Cloning the repository for initial deployment..."
+# Clean up previous clone if it exists
+rm -rf "$GITHUB_REPO"
 git clone "https://${GITHUB_USER}:${GITHUB_PAT}@github.com/${GITHUB_USER}/${GITHUB_REPO}.git"
 cd "$GITHUB_REPO"
+
+# Set the authentication flag based on user's IAP choice
+AUTH_FLAG="--no-allow-unauthenticated"
+if [[ ! "$ENABLE_IAP" =~ ^[yY](es)?$ ]]; then
+    AUTH_FLAG="--allow-unauthenticated"
+    print_info "IAP is disabled. The service will be deployed to allow unauthenticated access."
+fi
 
 print_info "Performing initial build and push of the Docker image..."
 IMAGE_TAG="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPO_NAME}/${SERVICE_NAME}:initial"
@@ -208,58 +192,39 @@ gcloud run deploy "$SERVICE_NAME" \
     --region="$REGION" \
     --port="8080" \
     --set-env-vars="GA4_BIGQUERY_DATASET=${GA4_DATASET_ID}" \
-    --no-allow-unauthenticated
+    $AUTH_FLAG
 
-# Return to home directory 
-cd ~
+# Return to the previous directory and clean up
+cd ..
+rm -rf "$GITHUB_REPO"
 
 # --- 7. CONFIGURE IAP ---
-print_info "Securing Cloud Run service with Identity-Aware Proxy (IAP)..."
-gcloud beta run services update "$SERVICE_NAME" --region="$REGION" --iap
+if [[ "$ENABLE_IAP" =~ ^[yY](es)?$ ]]; then
+    print_info "Securing Cloud Run service with Identity-Aware Proxy (IAP)..."
+    gcloud beta run services update "$SERVICE_NAME" --region="$REGION" --iap
 
-PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
-IAP_SA_EMAIL="service-${PROJECT_NUMBER}@gcp-sa-iap.iam.gserviceaccount.com"
+    PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
+    IAP_SA_EMAIL="service-${PROJECT_NUMBER}@gcp-sa-iap.iam.gserviceaccount.com"
 
-print_info "Granting IAP invoker role..."
-gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
-    --region="$REGION" \
-    --member="serviceAccount:$IAP_SA_EMAIL" \
-    --role="roles/run.invoker"
+    print_info "Granting IAP invoker role..."
+    gcloud run services add-iam-policy-binding "$SERVICE_NAME" --region="$REGION" --member="serviceAccount:$IAP_SA_EMAIL" --role="roles/run.invoker"
 
-print_info "Granting your account '$USER_EMAIL' access via IAP..."
-gcloud iap web add-iam-policy-binding \
-    --resource-type=cloud-run \
-    --service="$SERVICE_NAME" \
-    --project="$PROJECT_ID" \
-    --region="$REGION" \
-    --member="user:$USER_EMAIL" \
-    --role="roles/iap.httpsResourceAccessor"
+    print_info "Granting your account '$USER_EMAIL' access via IAP..."
+    gcloud iap web add-iam-policy-binding --resource-type=cloud-run --service="$SERVICE_NAME" --project="$PROJECT_ID" --region="$REGION" --member="user:$USER_EMAIL" --role="roles/iap.httpsResourceAccessor"
+else
+    print_info "Skipping IAP configuration as requested."
+fi
+
 
 # --- 8. GRANT SYSTEM PERMISSIONS ---
 print_info "Granting required system permissions for Cloud Run..."
+PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
 GCR_SA_EMAIL="service-${PROJECT_NUMBER}@serverless-robot-prod.iam.gserviceaccount.com"
-gcloud iam service-accounts add-iam-policy-binding "$APP_SERVICE_ACCOUNT_EMAIL" \
-  --member="serviceAccount:$GCR_SA_EMAIL" \
-  --role="roles/iam.serviceAccountUser"
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-  --member="serviceAccount:$GCR_SA_EMAIL" \
-  --role="roles/artifactregistry.reader"
+gcloud iam service-accounts add-iam-policy-binding "$APP_SERVICE_ACCOUNT_EMAIL" --member="serviceAccount:$GCR_SA_EMAIL" --role="roles/iam.serviceAccountUser"
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$GCR_SA_EMAIL" --role="roles/artifactregistry.reader"
 
-# --- 9. STORE GITHUB TOKEN IN SECRET MANAGER ---
-print_info "Storing GitHub PAT in Secret Manager..."
-gcloud secrets create "$GITHUB_SECRET_NAME" \
-    --replication-policy="automatic" --project="$PROJECT_ID" || print_info "Secret '$GITHUB_SECRET_NAME' already exists."
 
-printf "%s" "$GITHUB_PAT" | gcloud secrets versions add "$GITHUB_SECRET_NAME" --data-file=- --project="$PROJECT_ID"
-
-CLOUDBUILD_SA_EMAIL="${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com"
-print_info "Granting Cloud Build default SA access to the secret..."
-gcloud secrets add-iam-policy-binding "$GITHUB_SECRET_NAME" \
-    --member="serviceAccount:$CLOUDBUILD_SA_EMAIL" \
-    --role="roles/secretmanager.secretAccessor" \
-    --project="$PROJECT_ID"
-
-# --- 10. CREATE CLOUD BUILD TRIGGER ---
+# --- 9. CREATE CLOUD BUILD TRIGGER ---
 print_info "Creating Cloud Build trigger..."
 gcloud beta builds triggers create github \
     --name="deploy-${SERVICE_NAME}-main" \
@@ -270,10 +235,9 @@ gcloud beta builds triggers create github \
     --branch-pattern="^main$" \
     --build-config="cloudbuild.yaml" \
     --service-account="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SERVICE_ACCOUNT_EMAIL}" \
-    --substitutions="_REGION=${REGION},_REPO_NAME=${ARTIFACT_REPO_NAME},_SERVICE_NAME=${SERVICE_NAME},_SERVICE_ACCOUNT=${APP_SERVICE_ACCOUNT_EMAIL},_GA4_BIGQUERY_DATASET=${GA4_DATASET_ID}" \
-    --secret-manager-secret="_GITHUB_TOKEN,secretName=${GITHUB_SECRET_NAME},versionName=latest"
+    --substitutions="_REGION=${REGION},_REPO_NAME=${ARTIFACT_REPO_NAME},_SERVICE_NAME=${SERVICE_NAME},_SERVICE_ACCOUNT=${APP_SERVICE_ACCOUNT_EMAIL},_GA4_BIGQUERY_DATASET=${GA4_DATASET_ID},_AUTH_FLAG=${AUTH_FLAG}"
 
-# --- 11. FINAL OUTPUT ---
+# --- 10. FINAL OUTPUT ---
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --format='value(status.url)')
 
 print_success "Setup Complete!"
@@ -281,5 +245,12 @@ echo "------------------------------------------------------------------"
 echo -e "Your application is deployed and available at:"
 echo -e "${YELLOW}${SERVICE_URL}${NC}"
 echo ""
+
+if [[ "$ENABLE_IAP" =~ ^[yY](es)?$ ]]; then
+    print_info "The application is secured with IAP. You must be logged in with '$USER_EMAIL' to access it."
+else
+    print_info "The application is publicly accessible. Anyone with the URL can view it."
+fi
+
 print_info "A CI/CD pipeline has been created. Push changes to the 'main' branch of your GitHub repository to trigger a new deployment."
 echo "------------------------------------------------------------------"

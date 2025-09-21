@@ -54,7 +54,7 @@ steps:
       - '--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO_NAME}/${_SERVICE_NAME}:${SHORT_SHA}'
       - '--region=${_REGION}'
       - '--service-account=${_SERVICE_ACCOUNT}'
-      - '--no-allow-unauthenticated'
+      - '${_AUTH_FLAG}'
       # Set environment variables for the application
       - '--set-env-vars=GA4_BIGQUERY_DATASET=${_GA4_BIGQUERY_DATASET},VERTEX_LOCATION=${_VERTEX_LOCATION},MODEL_ID=${_MODEL_ID}'
       - '--port=8080'
